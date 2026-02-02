@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-biotech-cyan: var(--biotech-cyan);
+  --color-biotech-purple: var(--biotech-purple);
+  --color-biotech-border: var(--biotech-border);
+  --color-biotech-glass: var(--biotech-glass);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+:root {
+  --biotech-cyan: #00f2ff;
+  --biotech-purple: #7000ff;
+  --biotech-border: rgba(255, 255, 255, 0.1);
+  --biotech-glass: rgba(0, 0, 0, 0.4);
+  --radius: 1.5rem;
+  --background: #ffffff;
+  --foreground: #020617;
+}
+
+.dark {
+  --biotech-cyan: #00e6ff;
+  --biotech-purple: #8b5cff;
+  --biotech-border: rgba(255, 255, 255, 0.15);
+  --biotech-glass: rgba(0, 0, 0, 0.6);
+  --background: #020617;
+  --foreground: #f8fafc;
+  --border: rgba(255, 255, 255, 0.1);
+}
+
+/* FIX: Tailwind v4 mein @utility hamesha bahar hona chahiye, @layer ke andar nahi */
+@utility custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    transition: all 0.3s ease;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: #3b82f6;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+  }
+}
+
+@utility glass-card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+@utility neon-glow {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+  &:hover {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-white/10 outline-none;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-blue-500/30;
+    overflow-x: hidden;
+  }
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}

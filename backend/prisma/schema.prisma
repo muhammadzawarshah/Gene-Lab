@@ -1,0 +1,536 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model accountbalance {
+  acc_bal_id      Int       @id
+  gl_account_id   Int
+  period          String    @db.VarChar(50)
+  opening_balance Decimal?  @default(0.00) @db.Decimal(15, 2)
+  debit_total     Decimal?  @default(0.00) @db.Decimal(15, 2)
+  credit_total    Decimal?  @default(0.00) @db.Decimal(15, 2)
+  closing_balance Decimal?  @default(0.00) @db.Decimal(15, 2)
+  glaccount       glaccount @relation(fields: [gl_account_id], references: [gl_account_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([gl_account_id, period])
+}
+
+model addresses {
+  address_id  Int     @id
+  party_id    String  @db.Uuid
+  line1       String  @db.VarChar(255)
+  line2       String? @db.VarChar(255)
+  city        String? @db.VarChar(100)
+  postal_code String? @db.VarChar(20)
+  country     String? @db.VarChar(100)
+  party       party   @relation(fields: [party_id], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model batch {
+  batch_id           Int                @id @default(autoincrement())
+  product_id         String             @db.Uuid
+  batch_number       String             @db.VarChar(100)
+  manufacturing_date DateTime?          @db.Date
+  expiry_date        DateTime?          @db.Date
+  received_quantity  Decimal            @db.Decimal(15, 0)
+  available_quantity Decimal            @db.Decimal(15, 0)
+  status             String             @db.VarChar(50)
+  location_id        Int?
+  province           province?          @relation(fields: [location_id], references: [province_id], onDelete: NoAction, onUpdate: NoAction)
+  product            product            @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  deliverynoteline   deliverynoteline[]
+  grnline            grnline[]
+  stockmovement      stockmovement[]
+}
+
+model customerinvoice {
+  cust_inv_id         Int                   @id @default(autoincrement())
+  cust_invoice_number String?               @unique @db.VarChar(50)
+  party_id_customer   String                @db.Uuid
+  cust_invoice_date   DateTime              @db.Date
+  cust_inv_due_date   DateTime?             @db.Date
+  total_amount        Decimal?              @default(0.00) @db.Decimal(15, 2)
+  status              customer_invoice_enum
+  so_id               Int?
+  party               party                 @relation(fields: [party_id_customer], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+  salesorder          salesorder?           @relation(fields: [so_id], references: [so_id], onDelete: NoAction, onUpdate: NoAction)
+  customerinvoiceline customerinvoiceline[]
+  paymentallocation   paymentallocation[]
+}
+
+model customerinvoiceline {
+  cust_inv_line_id Int             @id @default(autoincrement())
+  cust_inv_id      Int
+  product_id       String?         @db.Uuid
+  quantity         Decimal         @db.Decimal(15, 0)
+  unit_price       Decimal         @db.Decimal(15, 4)
+  discount         Decimal?        @default(0.00) @db.Decimal(5, 2)
+  tax_id           Int?
+  line_total       Decimal         @db.Decimal(15, 2)
+  customerinvoice  customerinvoice @relation(fields: [cust_inv_id], references: [cust_inv_id], onDelete: NoAction, onUpdate: NoAction)
+  product          product?        @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  tax              tax?            @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model deliverynote {
+  delv_note_id     Int                @id @default(autoincrement())
+  delivery_number  String?            @unique @db.VarChar(50)
+  so_id            Int?
+  delv_date        DateTime           @db.Date
+  delivered_by     String?            @db.VarChar(100)
+  status           String?            @db.VarChar(50)
+  salesorder       salesorder?        @relation(fields: [so_id], references: [so_id], onDelete: NoAction, onUpdate: NoAction)
+  deliverynoteline deliverynoteline[]
+}
+
+model deliverynoteline {
+  delv_note_line_id Int             @id @default(autoincrement())
+  delv_note_id      Int
+  product_id        String          @db.Uuid
+  delivered_qty     Decimal         @db.Decimal(15, 0)
+  uom_id            Int
+  batch_id          Int?
+  so_line_id        Int?
+  remarks           String?
+  batch             batch?          @relation(fields: [batch_id], references: [batch_id], onDelete: NoAction, onUpdate: NoAction)
+  deliverynote      deliverynote    @relation(fields: [delv_note_id], references: [delv_note_id], onDelete: NoAction, onUpdate: NoAction)
+  product           product         @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  salesorderline    salesorderline? @relation(fields: [so_line_id], references: [so_line_id], onDelete: NoAction, onUpdate: NoAction)
+  uom               uom             @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model glaccount {
+  gl_account_id      Int              @id
+  gl_account_code    String           @unique @db.VarChar(50)
+  parent_account_id  Int?
+  name               String           @db.VarChar(255)
+  type               String           @db.VarChar(50)
+  is_control_account Boolean?         @default(false)
+  controled_by       String?          @db.VarChar(50)
+  accountbalance     accountbalance[]
+  glaccount          glaccount?       @relation("glaccountToglaccount", fields: [parent_account_id], references: [gl_account_id], onDelete: NoAction, onUpdate: NoAction)
+  other_glaccount    glaccount[]      @relation("glaccountToglaccount")
+  journalline        journalline[]
+  tax                tax[]
+}
+
+model grn {
+  grn_id        Int            @id @default(autoincrement())
+  grn_number    String?        @unique @db.VarChar(50)
+  po_id         Int?
+  received_date DateTime       @db.Date
+  received_by   String?        @db.VarChar(100)
+  status        String?        @db.VarChar(50)
+  purchaseorder purchaseorder? @relation(fields: [po_id], references: [po_id], onDelete: NoAction, onUpdate: NoAction)
+  grnline       grnline[]
+}
+
+model grnline {
+  grn_line_id       Int                @id @default(autoincrement())
+  grn_id            Int
+  product_id        String             @db.Uuid
+  received_qty      Decimal            @db.Decimal(15, 4)
+  uom_id            Int
+  batch_id          Int?
+  expiry_date       DateTime?          @db.Date
+  po_line_id        Int?
+  remarks           String?
+  batch             batch?             @relation(fields: [batch_id], references: [batch_id], onDelete: NoAction, onUpdate: NoAction)
+  grn               grn                @relation(fields: [grn_id], references: [grn_id], onDelete: NoAction, onUpdate: NoAction)
+  purchaseorderline purchaseorderline? @relation(fields: [po_line_id], references: [po_line_id], onDelete: NoAction, onUpdate: NoAction)
+  product           product            @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  uom               uom                @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model journalentry {
+  journal_entry_id Int               @id @default(autoincrement())
+  journal_number   String            @unique @db.VarChar(50)
+  journal_type     journal_type_enum
+  date             DateTime          @db.Date
+  narration        String?
+  posted_by        String?           @db.VarChar(100)
+  posted_at        DateTime?         @db.Timestamptz(6)
+  source_type      String?           @db.VarChar(100)
+  source_id        Int?
+  journalline      journalline[]
+}
+
+model journalline {
+  journal_line_id     Int          @id @default(autoincrement())
+  journal_entry_id    Int
+  gl_account_id       Int
+  debit               Decimal?     @default(0.00) @db.Decimal(15, 2)
+  credit              Decimal?     @default(0.00) @db.Decimal(15, 2)
+  party_id_sub_ledger String?      @db.Uuid
+  cost_center_id      Int?
+  glaccount           glaccount    @relation(fields: [gl_account_id], references: [gl_account_id], onDelete: NoAction, onUpdate: NoAction)
+  journalentry        journalentry @relation(fields: [journal_entry_id], references: [journal_entry_id], onDelete: NoAction, onUpdate: NoAction)
+  party               party?       @relation(fields: [party_id_sub_ledger], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model party {
+  party_id        String            @id @db.Uuid
+  type            party_enum
+  name            String            @db.VarChar(255)
+  tax_id          Int?
+  email           String?           @db.VarChar(100)
+  phone           String?           @db.VarChar(50)
+  user_id         Int?
+  addresses       addresses[]
+  customerinvoice customerinvoice[]
+  journalline     journalline[]
+  user            user?             @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_party_user")
+  tax             tax?              @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
+  payment         payment[]
+  purchaseorder   purchaseorder[]
+  salesorder      salesorder[]
+  supplierinvoice supplierinvoice[]
+}
+
+model payment {
+  payment_id        Int                 @id @default(autoincrement())
+  payment_number    String?             @unique @db.VarChar(50)
+  party_id          String?             @db.Uuid
+  payment_date      DateTime            @db.Date
+  payment_type      payment_enum
+  method            payment_enum_method
+  amount            Decimal             @db.Decimal(15, 2)
+  reference_number  String?             @db.VarChar(100)
+  created_by        String?             @db.VarChar(100)
+  created_at        DateTime?           @db.Timestamptz(6)
+  party             party?              @relation(fields: [party_id], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+  paymentallocation paymentallocation[]
+}
+
+model paymentallocation {
+  payment_allocation_id Int              @id @default(autoincrement())
+  payment_id            Int
+  cust_inv_id           Int?
+  suppl_inv_id          Int?
+  allocated_amount      Decimal          @db.Decimal(15, 2)
+  remarks               String?
+  customerinvoice       customerinvoice? @relation(fields: [cust_inv_id], references: [cust_inv_id], onDelete: NoAction, onUpdate: NoAction)
+  payment               payment          @relation(fields: [payment_id], references: [payment_id], onDelete: NoAction, onUpdate: NoAction)
+  supplierinvoice       supplierinvoice? @relation(fields: [suppl_inv_id], references: [suppl_inv_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model product {
+  product_id          String                @id @db.Uuid
+  sku_code            String?               @unique @db.VarChar(50)
+  name                String                @db.VarChar(255)
+  description         String?
+  product_cat_id      Int?
+  uom_id              Int
+  hsn_code            String?               @db.VarChar(50)
+  brand               String?               @db.VarChar(100)
+  batch               batch[]
+  customerinvoiceline customerinvoiceline[]
+  deliverynoteline    deliverynoteline[]
+  grnline             grnline[]
+  productcategory     productcategory?      @relation(fields: [product_cat_id], references: [product_category_id], onDelete: NoAction, onUpdate: NoAction)
+  uom                 uom                   @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+  productprice        productprice[]
+  purchaseorderline   purchaseorderline[]
+  salesorderline      salesorderline[]
+  stockitem           stockitem[]
+  stockmovement       stockmovement[]
+  supplierinvoiceline supplierinvoiceline[]
+}
+
+model productcategory {
+  product_category_id Int       @id
+  category            String?   @db.VarChar(50)
+  description         String?
+  product             product[]
+}
+
+model productprice {
+  prod_price_id  Int             @id
+  product_id     String          @db.Uuid
+  price_type     price_type_enum
+  currency       String?         @db.VarChar(10)
+  uom_id         Int
+  unit_price     Decimal         @db.Decimal(15, 4)
+  effective_from DateTime        @db.Date
+  effective_to   DateTime?       @db.Date
+  tax_id         Int?
+  product        product         @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  tax            tax?            @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
+  uom            uom             @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model province {
+  province_id Int         @id
+  name        String?     @db.VarChar(100)
+  batch       batch[]
+  warehouse   warehouse[]
+}
+
+model purchaseorder {
+  po_id             Int                 @id @default(autoincrement())
+  party_id_supplier String              @db.Uuid
+  order_date        DateTime            @db.Date
+  expected_del_date DateTime?           @db.Date
+  status            purchase_order_enum
+  total_amount      Decimal?            @default(0.00) @db.Decimal(15, 2)
+  grn               grn[]
+  party             party               @relation(fields: [party_id_supplier], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+  purchaseorderline purchaseorderline[]
+  supplierinvoice   supplierinvoice[]
+}
+
+model purchaseorderline {
+  po_line_id    Int           @id @default(autoincrement())
+  po_id         Int
+  product_id    String        @db.Uuid
+  quantity      Decimal       @db.Decimal(15, 4)
+  uom_id        Int
+  unit_price    Decimal       @db.Decimal(15, 4)
+  line_total    Decimal       @db.Decimal(15, 2)
+  tax_id        Int?
+  grnline       grnline[]
+  purchaseorder purchaseorder @relation(fields: [po_id], references: [po_id], onDelete: NoAction, onUpdate: NoAction)
+  product       product       @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  tax           tax?          @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
+  uom           uom           @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model salesorder {
+  so_id             Int                 @id @default(autoincrement())
+  party_id_customer String              @db.Uuid
+  order_date        DateTime            @db.Date
+  expected_del_date DateTime?           @db.Date
+  status            purchase_order_enum
+  total_amount      Decimal?            @default(0.00) @db.Decimal(15, 2)
+  customerinvoice   customerinvoice[]
+  deliverynote      deliverynote[]
+  party             party               @relation(fields: [party_id_customer], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+  salesorderline    salesorderline[]
+}
+
+model salesorderline {
+  so_line_id       Int                @id @default(autoincrement())
+  so_id            Int
+  product_id       String             @db.Uuid
+  quantity         Decimal            @db.Decimal(15, 4)
+  uom_id           Int
+  unit_price       Decimal            @db.Decimal(15, 4)
+  line_total       Decimal            @db.Decimal(15, 2)
+  tax_id           Int?
+  deliverynoteline deliverynoteline[]
+  product          product            @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  salesorder       salesorder         @relation(fields: [so_id], references: [so_id], onDelete: NoAction, onUpdate: NoAction)
+  tax              tax?               @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
+  uom              uom                @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model stockitem {
+  stock_item_id     Int       @id @default(autoincrement())
+  product_id        String    @db.Uuid
+  warehouse_id      Int
+  uom_id            Int
+  quantity_on_hand  Decimal?  @default(0.00) @db.Decimal(15, 4)
+  reorder_point     Decimal?  @db.Decimal(15, 4)
+  reserved_quantity Decimal?  @default(0.00) @db.Decimal(15, 4)
+  product           product   @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  uom               uom       @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+  warehouse         warehouse @relation(fields: [warehouse_id], references: [warehouse_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([product_id, warehouse_id])
+}
+
+model stockmovement {
+  stock_mov_id                                         Int                  @id @default(autoincrement())
+  mov_type                                             move_type_enum
+  source_doctype                                       source_doctype_enum?
+  source_doc_id                                        source_doc_id_enum?
+  product_id                                           String               @db.Uuid
+  warehouse_from_id                                    Int?
+  warehouse_to_id                                      Int?
+  quantity                                             Decimal              @db.Decimal(15, 4)
+  uom_id                                               Int
+  batch_id                                             Int?
+  posted_at                                            DateTime?            @db.Timestamptz(6)
+  batch                                                batch?               @relation(fields: [batch_id], references: [batch_id], onDelete: NoAction, onUpdate: NoAction)
+  product                                              product              @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  uom                                                  uom                  @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
+  warehouse_stockmovement_warehouse_from_idTowarehouse warehouse?           @relation("stockmovement_warehouse_from_idTowarehouse", fields: [warehouse_from_id], references: [warehouse_id], onDelete: NoAction, onUpdate: NoAction)
+  warehouse_stockmovement_warehouse_to_idTowarehouse   warehouse?           @relation("stockmovement_warehouse_to_idTowarehouse", fields: [warehouse_to_id], references: [warehouse_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model supplierinvoice {
+  suppl_inv_id         Int                   @id
+  suppl_invoice_number String?               @unique @db.VarChar(50)
+  party_id             String                @db.Uuid
+  suppl_invoice_date   DateTime              @db.Date
+  suppl_inv_due_date   DateTime?             @db.Date
+  amount_untaxed       Decimal?              @default(0.00) @db.Decimal(15, 2)
+  tax_amount           Decimal?              @default(0.00) @db.Decimal(15, 2)
+  total_amount         Decimal?              @default(0.00) @db.Decimal(15, 2)
+  status               supplier_invoice_enum
+  po_id                Int?
+  paymentallocation    paymentallocation[]
+  party                party                 @relation(fields: [party_id], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
+  purchaseorder        purchaseorder?        @relation(fields: [po_id], references: [po_id], onDelete: NoAction, onUpdate: NoAction)
+  supplierinvoiceline  supplierinvoiceline[]
+}
+
+model supplierinvoiceline {
+  suppl_inv_line_id Int             @id
+  suppl_inv_id      Int
+  product_id        String?         @db.Uuid
+  quantity          Decimal         @db.Decimal(15, 0)
+  unit_price        Decimal         @db.Decimal(15, 4)
+  tax_id            Int?
+  line_total        Decimal         @db.Decimal(15, 2)
+  product           product?        @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  supplierinvoice   supplierinvoice @relation(fields: [suppl_inv_id], references: [suppl_inv_id], onDelete: NoAction, onUpdate: NoAction)
+  tax               tax?            @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model tax {
+  tax_id              Int                   @id
+  name                String                @db.VarChar(255)
+  rate                Decimal?              @db.Decimal(5, 4)
+  type                String                @db.VarChar(50)
+  context             String?               @db.VarChar(50)
+  gl_account_id       Int?
+  customerinvoiceline customerinvoiceline[]
+  party               party[]
+  productprice        productprice[]
+  purchaseorderline   purchaseorderline[]
+  salesorderline      salesorderline[]
+  supplierinvoiceline supplierinvoiceline[]
+  glaccount           glaccount?            @relation(fields: [gl_account_id], references: [gl_account_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model uom {
+  uom_id             Int                 @id
+  name               String              @unique @db.VarChar(100)
+  conversion_to_base Decimal?            @db.Decimal(10, 4)
+  deliverynoteline   deliverynoteline[]
+  grnline            grnline[]
+  product            product[]
+  productprice       productprice[]
+  purchaseorderline  purchaseorderline[]
+  salesorderline     salesorderline[]
+  stockitem          stockitem[]
+  stockmovement      stockmovement[]
+}
+
+model warehouse {
+  warehouse_id                                             Int             @id @default(autoincrement())
+  name                                                     String?         @db.VarChar(50)
+  location                                                 Int?
+  type                                                     String?         @db.VarChar(50)
+  stockitem                                                stockitem[]
+  stockmovement_stockmovement_warehouse_from_idTowarehouse stockmovement[] @relation("stockmovement_warehouse_from_idTowarehouse")
+  stockmovement_stockmovement_warehouse_to_idTowarehouse   stockmovement[] @relation("stockmovement_warehouse_to_idTowarehouse")
+  province                                                 province?       @relation(fields: [location], references: [province_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model user {
+  user_id    Int       @id @default(autoincrement())
+  username   String    @unique @db.VarChar(50)
+  email      String    @unique @db.VarChar(100)
+  password   String    @db.VarChar(255)
+  role       user_role @default(STAFF)
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @updatedAt @db.Timestamptz(6)
+  party      party[]
+}
+
+enum user_role {
+  ADMIN
+  MANAGER
+  STAFF
+  ACCOUNTANT
+  WAREHOUSE_USER
+  WAREHOUSE_SUPPERVISOR
+  WAREHOUSE_CUSTOMER
+}
+
+enum customer_invoice_enum {
+  DRAFT
+  POSTED
+  PAID
+}
+
+enum gl_account_enum {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum journal_type_enum {
+  SALES
+  PURCHASE
+  PAYMENT
+  RECEIPT
+  ADJUSTMENT
+  OPENING
+}
+
+enum move_type_enum {
+  INBOUND
+  OUTBOUND
+  TRANSFER
+  ADJUSTMENT
+}
+
+enum party_enum {
+  SUPPLIER
+  CUSTOMER
+  BOTH
+  OTHER
+}
+
+enum payment_enum {
+  RECEIPT
+  PAYMENT
+}
+
+enum payment_enum_method {
+  CASH
+  BANK_TRANSFER @map("BANK TRANSFER")
+}
+
+enum price_type_enum {
+  RETAIL
+  WHOLESALE
+  DISTRIBUTER
+}
+
+enum purchase_order_enum {
+  DRAFT
+  APPROVED
+  RECIEVED
+  CLOSED
+  CANCELLED
+}
+
+enum source_doc_id_enum {
+  POLYMORPHIC
+  RELATIONSHIP
+}
+
+enum source_doctype_enum {
+  PURCHASE_ORDER @map("PURCHASE ORDER")
+  SALE_ORDER     @map("SALE ORDER")
+  GRN
+  INVOICE
+}
+
+enum supplier_invoice_enum {
+  DRAFT
+  POSTED
+  PAID
+  PARTIAL
+}
