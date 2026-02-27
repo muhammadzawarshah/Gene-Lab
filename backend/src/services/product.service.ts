@@ -4,19 +4,44 @@ import { v4 as uuidv4 } from 'uuid'; // UUID generate karne ke liye
 export class ProductService {
   // 1. Create Product
   static async createProduct(data: any) {
-    return await prisma.product.create({
-      data: {
-        product_id: data.productId || uuidv4(), // Agar ID nahi hai toh generate karega
-        sku_code: data.skuCode,
-        name: data.name,
-        description: data.description,
-        product_cat_id: data.categoryId,
-        uom_id: data.uomId,
-        hsn_code: data.hsnCode,
-        brand: data.brand,
+  // Batch find karne ka logic
+  const batchc = await prisma.batch.findFirst({
+    where: {
+      batch_number: data.batch_number
+    }
+  });
+
+  // Product ID generate karna agar nahi hai
+  const finalProductId = data.productId || uuidv4();
+
+  return await prisma.product.create({
+    data: {
+      product_id: finalProductId,
+      sku_code: data.sku,
+      name: data.name,
+      description: data.description,
+      product_cat_id: data.category_id ? parseInt(data.category_id) : null,
+      uom_id: parseInt(data.unit_id),
+      hsn_code: data.hsn_code,
+      brand: data.brand_name,
+      
+      // Batch connection
+      batch: batchc ? { connect: { batch_id: batchc.batch_id } } : undefined,
+
+      // Nested Product Price Creation
+      productprice: {
+        create: {
+          prod_price_id: Math.floor(Math.random() * 1000000), // Agar @default(autoincrement) nahi hai schema mein
+          price_type: 'RETAIL', // Aap price_type_enum use kar rahe hain
+          unit_price: data.product_price,
+          currency: 'PKR',
+          uom_id: parseInt(data.unit_id),
+          effective_from: new Date(), // Current date
+          // effective_to property optional hai schema ke mutabiq
+        }
       }
-    });
-  }
+    }
+  });}
 
   // 2. Get All Products with Details
   static async getAllProducts() {
@@ -42,8 +67,9 @@ export class ProductService {
         uom: true,
         productcategory: true,
         productprice: {
-          where: { effective_to: null } // Sirf current active price dikhane ke liye
-        }
+          where: { effective_to: null } 
+        },
+        batch: true
       }
     });
   }
@@ -59,7 +85,8 @@ export class ProductService {
           productcategory: true,
           productprice: {
             where: { effective_to: null }
-          }
+          },
+          batch:true
         }
       }
     )

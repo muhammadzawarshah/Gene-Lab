@@ -4,6 +4,7 @@ import { SalesService } from '../../services/sales.service.js';
 
 export const createSalesOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    console.log(req.body)
     const order = await SalesService.createOrder(req.body);
     res.status(201).json({ success: true, data: order });
   } catch (error) {
@@ -28,6 +29,18 @@ export const listsales=async  (req: Request, res: Response, next: NextFunction) 
     next(error);
   }
 };
+
+export const specificsales=async  (req: Request, res: Response, next: NextFunction) => {
+  try {
+    console.log(req.params);
+    const id = req.params.id;
+    const order = await SalesService.getSalesOrderById(id as any);
+    res.status(200).json({ success: true, data: order });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 export const listcustsales=async  (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -90,6 +103,34 @@ export const getBillingSyncStatus = async (req: Request, res: Response) => {
       message: "Internal Encryption Error", 
       error: error.message 
     });
+  }
+};
+
+export const updateSalesOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    console.log(req.body);
+    const orderId = Number(req.params.id);
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid Order ID is required"
+      });
+    }
+
+    const updatedOrder = await SalesService.updateOrder(orderId, req.body);
+
+    return res.status(200).json({
+      success: true,
+      data: updatedOrder
+    });
+
+  } catch (error) {
+    next(error);
   }
 };
 

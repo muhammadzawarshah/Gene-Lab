@@ -31,5 +31,35 @@ export const listPurchase = async (req: Request, res: Response, next: NextFuncti
   } catch (error) {
     next(error);
   }
-};
+}
 
+export const purchaseorderlistonpoid = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id= req.params.poId
+    const po = await PurchaseService.purchaseonpoid(id as any);
+
+    if(!po){
+      res.status(400).send("no po found")
+    }
+    res.status(201).json({ success: true, data: po });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export const updatepurchasepo = async (req:Request,res:Response , next: NextFunction)=>{
+  try {
+    const id= req.params.id;
+    const data = req.body;
+    console.log(req.params);
+    console.log(req.body);
+    const po = await PurchaseService.updatePO(id as any,data);
+
+    if(!po){
+      res.status(400).send("no po found")
+    }
+    res.status(201).json({ success: true, data: po });
+  } catch (error) {
+    next(error);
+  }
+}

@@ -12,6 +12,7 @@ import CategoryRoute from './category.route.js';
 import Warehouse from './warehouse.route.js';
 import Province from './province.routes.js';
 import Inventory from './inventory.route.js';
+import Grn from './grn.route.js'
 import { v1 } from 'uuid';
 const v1Router = Router();
 
@@ -26,6 +27,7 @@ v1Router.use('/erp',MasterRoute);
 v1Router.use('/category',CategoryRoute);
 v1Router.use('/warehouse', Warehouse);
 v1Router.use('/province', Province);
-v1Router.use('/inventory',Inventory)
+v1Router.use('/inventory',Inventory);
+v1Router.use('/grn',Grn);
 
 export default v1Router;

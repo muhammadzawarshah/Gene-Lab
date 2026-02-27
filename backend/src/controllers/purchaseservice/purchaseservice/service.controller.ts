@@ -1,22 +1,7 @@
 // import purchaseorder from "../../../models/purchaseorder.model";
 // import type{ Request,Response } from "express";
 
-// const createpurchase= async(req:Request,res: Response)=>{
-//     try {
-//         const {params,paramsline} = req.body;
 
-//         const po = await purchaseorder.createpo(params,paramsline);
-//         res.status(200).json({
-//             message:"the po created successfully",
-//             po
-//         })
-//     } catch (error) {
-//         res.status(500).json({
-//             message:"there will an error",
-//             error
-//         })
-//     }
-// }
 
 // const updatepo= async(req:Request,res:Response)=>{
 //     try {
@@ -68,7 +53,6 @@
 
 
 // export default {
-//     createpurchase,
 //     updatepo,
 //     readonlypo,
 //     readpo

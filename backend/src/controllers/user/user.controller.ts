@@ -47,11 +47,10 @@ export class UserController {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // 2. Compare password
       const isMatch = await bcrypt.compare(password, user.password);
       
       if (isMatch) {
-        // 3. Generate JWT Token
+     
         const token = jwt.sign(
           { 
             id: user.user_id, 
@@ -59,11 +58,10 @@ export class UserController {
             role: user.role 
           },
           JWT_SECRET,
-          { expiresIn: '7d' } // Token 7 din tak valid rahega
+          { expiresIn: '7d' } 
         );
 
-        // 4. Send Success Response
-        // Frontend 'response.data.token' isi field ko read karega
+        
         return res.status(200).json({ 
           success:true,
           message: "successful", 

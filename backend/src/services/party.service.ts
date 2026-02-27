@@ -26,7 +26,7 @@ export class PartyService {
     });
   }
 
-  // 2. List Parties by Type (e.g. Sirf Customers dikhane ke liye)
+
   static async getPartiesByType(type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH') {
     return await prisma.party.findMany({
       where: {

@@ -363,7 +363,7 @@ model stockmovement {
 }
 
 model supplierinvoice {
-  suppl_inv_id         Int                   @id
+  suppl_inv_id         Int                   @id @default(autoincrement())
   suppl_invoice_number String?               @unique @db.VarChar(50)
   party_id             String                @db.Uuid
   suppl_invoice_date   DateTime              @db.Date
@@ -380,7 +380,7 @@ model supplierinvoice {
 }
 
 model supplierinvoiceline {
-  suppl_inv_line_id Int             @id
+  suppl_inv_line_id Int             @id @default(autoincrement())
   suppl_inv_id      Int
   product_id        String?         @db.Uuid
   quantity          Decimal         @db.Decimal(15, 0)
@@ -483,6 +483,7 @@ enum move_type_enum {
   OUTBOUND
   TRANSFER
   ADJUSTMENT
+  GRN
 }
 
 enum party_enum {
@@ -522,8 +523,8 @@ enum source_doc_id_enum {
 }
 
 enum source_doctype_enum {
-  PURCHASE_ORDER @map("PURCHASE ORDER")
-  SALE_ORDER     @map("SALE ORDER")
+  PURCHASE_ORDER
+  SALE_ORDER
   GRN
   INVOICE
 }

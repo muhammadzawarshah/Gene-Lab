@@ -11,7 +11,7 @@ export class SalesService {
           party_id_customer: data.customerId,
           order_date: new Date(),
           status: 'DRAFT',
-          total_amount: data.totalAmount
+          total_amount: data.financials.netTotal
         } as any
       });
 
@@ -19,7 +19,7 @@ export class SalesService {
       for (const item of data.items) {
         // Atomic update with check: quantity_on_hand - reserved >= requested
         const stock = await tx.stockitem.findFirst({
-          where: { product_id: item.productId }
+          where: { product_id: item.product_id }
         });
 
         if (!stock || (Number(stock.quantity_on_hand) - Number(stock.reserved_quantity) < item.qty)) {
@@ -29,17 +29,17 @@ export class SalesService {
         await tx.salesorderline.create({
           data: {
             so_id: order.so_id,
-            product_id: item.productId,
-            quantity: item.qty,
+            product_id: item.product_id,
+            quantity: item.total_unit,
             uom_id: Number(item.uomId) || 1,
-            unit_price: item.price,
-            line_total: item.qty * item.price
+            unit_price: item.approved_rate,
+            line_total: item.amount
           } as any
         });
 
         await tx.stockitem.update({
           where: { stock_item_id: stock.stock_item_id },
-          data: { reserved_quantity: { increment: item.qty } }
+          data: { reserved_quantity: { increment: item.total_unit } }
         });
       }
       return order;
@@ -256,14 +256,14 @@ static async getFinancialLedger(userId: string) {
 }
 
 static async getBillingSyncStatus(userId: string) {
-    // 1. User ID se Party fetch karein
+    
     const party = await prisma.party.findFirst({
       where: { user_id: Number(userId) } as any
     });
 
     if (!party) throw new Error("PARTY_NOT_FOUND");
 
-    // 2. ERD Path: deliverynote -> salesorder -> party_id_customer
+   
     const deliveries = await prisma.deliverynote.findMany({
       where: {
         salesorder: {
@@ -286,7 +286,7 @@ static async getBillingSyncStatus(userId: string) {
       orderBy: { delv_date: 'desc' }
     });
 
-    // 3. Data Transformation
+    
     const logs = deliveries.map((dn: any) => {
       const invoices = dn.salesorder?.customerinvoice || [];
       const linkedInvoice = invoices.length > 0 ? invoices[0] : null;
@@ -318,4 +318,143 @@ static async getBillingSyncStatus(userId: string) {
       }
     };
   }
+
+  static async updateOrder(orderId: number, data: any) {
+  return await prisma.$transaction(async (tx) => {
+
+    // 1. Check if Order exists
+    const existingOrder = await tx.salesorder.findUnique({
+      where: { so_id: Number(orderId) },
+      include: { salesorderline: true }
+    });
+
+    if (!existingOrder) {
+      throw new Error("Order not found");
+    }
+
+
+    await tx.salesorder.update({
+      where: { so_id: Number(orderId) },
+      data: {
+        status: data.status ?? existingOrder.status,
+        total_amount: data.financials?.netTotal ? parseFloat(data.financials.netTotal) : existingOrder.total_amount
+      }
+    });
+
+   
+    if (data.items && Array.isArray(data.items)) {
+      
+      for (const item of data.items) {
+        
+        // Mapping frontend keys to database fields
+        const currentProductId = item.product_id; 
+        const newQty = Number(item.total_unit);
+        const newPrice = Number(item.approved_rate);
+
+        const existingLine = existingOrder.salesorderline.find(
+          (l) => l.product_id === currentProductId
+        );
+
+        // Stock check logic
+        const stock = await tx.stockitem.findFirst({
+          where: { product_id: currentProductId }
+        });
+
+        if (!stock) {
+          throw new Error(`Stock not found for product ${currentProductId}`);
+        }
+
+        const oldQty = existingLine ? Number(existingLine.quantity) : 0;
+        const qtyDiff = newQty - oldQty;
+
+        // Agar quantity barh rahi hai to stock check karo
+        if (qtyDiff > 0) {
+          const available = Number(stock.quantity_on_hand) - Number(stock.reserved_quantity);
+          if (available < qtyDiff) {
+            throw new Error(`Insufficient stock for product ${currentProductId}. Available: ${available}, Required additional: ${qtyDiff}`);
+          }
+        }
+
+        // Update or Create Line
+        if (existingLine) {
+          await tx.salesorderline.update({
+            where: { so_line_id: existingLine.so_line_id },
+            data: {
+              quantity: newQty,
+              unit_price: newPrice,
+              line_total: newQty * newPrice
+            }
+          });
+        } else {
+          await tx.salesorderline.create({
+            data: {
+              so_id: Number(orderId),
+              product_id: currentProductId,
+              quantity: newQty,
+              uom_id: Number(item.uom_id) || 1,
+              unit_price: newPrice,
+              line_total: newQty * newPrice
+            }
+          });
+        }
+
+        // 4. Update Reserved Stock
+        if (qtyDiff !== 0) {
+          await tx.stockitem.update({
+            where: { stock_item_id: stock.stock_item_id },
+            data: {
+              reserved_quantity: {
+                increment: qtyDiff
+              }
+            }
+          });
+        }
+      }
+    }
+
+    return { success: true, message: "Order updated successfully" };
+  });
+}
+
+// Specific Sales Order Detail fetch karne ke liye function
+  static async getSalesOrderById(id: string) {
+    try {
+      const order = await prisma.salesorder.findUnique({
+        where: { 
+          so_id: Number(id) 
+        },
+        include: {
+          // 1. Customer (Party) details
+          party: {
+            select: {
+              party_id: true,
+              name: true,
+              phone: true
+            }
+          },
+          // 2. Order Lines (Items) details
+          salesorderline: {
+            include: {
+              product: {
+                select: {
+                  name: true,
+                  uom: true // Agar product ke saath UOM linked hai
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!order) {
+        throw new Error(`Sales Order with ID ${id} not found.`);
+      }
+
+      return order;
+    } catch (error: any) {
+      console.error("Error in getSalesOrderById:", error.message);
+      throw error;
+    }
+  }
+
 }

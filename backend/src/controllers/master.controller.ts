@@ -60,36 +60,44 @@ export class ERPController {
         } catch (e) { next(e); }
     }
 
-    // ================= PURCHASE & GRN =================
 
-    // 3. Purchase: Create Purchase Order
     static async createPurchaseOrder(req: Request, res: Response, next: NextFunction) {
         try {
             console.log(req.body);
-            const { party_id_supplier, items } = req.body;
-
-            // Validation check
-            if (!party_id_supplier) {
-                return res.status(400).json({ success: false, message: "Supplier is required." });
-            }
+            const { items, financials } = req.body;
 
             const po = await prisma.purchaseorder.create({
                 data: {
-                    // Relation connect karne ke liye connect use karein
                     party: {
-                        connect: { party_id: party_id_supplier }
+                        connect: { party_id: '11111111-1111-1111-1111-111111111111' }
                     },
                     order_date: new Date(),
-                    status: 'DRAFT',
+                    status: 'APPROVED',
+
+                    // PO table ka total amount (Frontend se aya hua netTotal)
+                    total_amount: parseFloat(financials.netTotal),
+
                     purchaseorderline: {
-                        create: items.map((item: any) => ({
-                            product_id: item.product_id,
-                            quantity: parseFloat(item.quantity),
-                            uom_id: Number(item.uom_id),
-                            tax_id: item.tax_id ? Number(item.tax_id) : null,
-                            unit_price: parseFloat(item.unit_price),
-                            line_total: parseFloat(item.quantity) * parseFloat(item.unit_price)
-                        }))
+                        create: items.map((item: any) => {
+                            // Individual item ka logic
+                            const qty = parseFloat(item.total_unit);
+                            const rate = parseFloat(item.approved_rate);
+
+                            // Item ka apna total (Quantity * Rate)
+                            // Note: Agar tax/discount per-item hai toh yahan calculate hoga
+                            const itemLineTotal = qty * rate;
+
+                            return {
+                                product_id: item.product_id,
+                                quantity: qty,
+                                uom_id: Number(item.uom_id) || 1, // Default 1 agar missing ho
+                                tax_id: item.tax_id ? Number(item.tax_id) : null,
+                                unit_price: rate,
+
+                                // FIX: Yahan pure order ka netTotal nahi, balki sirf IS item ka total jayega
+                                line_total: itemLineTotal
+                            };
+                        })
                     }
                 },
                 include: {
@@ -271,7 +279,7 @@ export class ERPController {
     // Is method ko apne ERPController mein update karein
     static async getDropdowns(req: Request, res: Response, next: NextFunction) {
         try {
-            const [products, parties, uoms, categories, warehouses, provinces, tax] = await Promise.all([
+            const [products, parties, uoms, categories, warehouses, provinces, tax , batch] = await Promise.all([
                 prisma.product.findMany({ select: { product_id: true, name: true, sku_code: true } }),
                 prisma.party.findMany(),
                 prisma.uom.findMany(),
@@ -279,6 +287,7 @@ export class ERPController {
                 prisma.warehouse.findMany(),
                 prisma.province.findMany(),
                 prisma.tax.findMany(),
+                prisma.batch.findMany(),
             ]);
 
             res.json({
@@ -290,7 +299,8 @@ export class ERPController {
                     categories,
                     warehouses,
                     provinces,
-                    tax
+                    tax,
+                    batch
                 }
             });
         } catch (e) {

@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { source_doctype_enum } from "@prisma/client";
 
 export class DeliveryService {
   async processDelivery(soId: number, warehouseId: number) {
@@ -10,7 +11,7 @@ export class DeliveryService {
 
       const delivery = await tx.deliverynote.create({
         data: {
-          delv_note_id: Math.floor(Date.now() / 1000), // Generate unique ID or use your ID generation logic
+          delv_note_id: Math.floor(Date.now() / 1000), 
           so_id: soId,
           delv_date: new Date(),
           status: 'POSTED',
@@ -44,7 +45,7 @@ export class DeliveryService {
             stock_mov_id: Math.floor(Date.now() / 1000),
             mov_type: 'OUTBOUND',
             // FIX: Underscore hatakar space lagaya hai as per your Schema @map
-            source_doctype: 'SALE ORDER', 
+            source_doctype: source_doctype_enum.SALE_ORDER, 
             product_id: line.product_id,
             warehouse_from_id: warehouseId,
             quantity: line.quantity,

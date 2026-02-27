@@ -5,6 +5,7 @@ import mqEmitter from '../../../utils/eventEmitter.js';
 
 export const receiveGoods = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    console.log(req.body)
     const { poId, warehouseId, items } = req.body;
 
     // 1. Basic Validation
@@ -35,5 +36,38 @@ export const receiveGoods = async (req: Request, res: Response, next: NextFuncti
     console.log(error)
     // Transaction fail hone par error yahan aayega
     next(error); 
+  }};
+
+export const listgrn = async (req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const grn = await GrnService.listgrn();
+    res.status(200).send(grn);
+  } catch (error) {
+    next(error)
+  }
+
+
+};
+
+export const getSingleGRN = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params; // Yahan 'id' string format mein milegi (e.g., "123" or "GRN-123")
+
+    // Direct 'id' pass karein, Service khud handle kar legi
+    const grn = await GrnService.getGRNById(id as any);
+
+    if (!grn) {
+      return res.status(404).json({ 
+        success: false,
+        message: "GRN not found!" 
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: grn
+    });
+  } catch (error) {
+    next(error);
   }
 };
