@@ -36,6 +36,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setRole(null);
     Cookies.remove('virtue_token');
     Cookies.remove('virtue_user');
+    Cookies.remove('user_id');
+    Cookies.remove('userId');
+    Cookies.remove('auth_token');  // also clear legacy token used by accountsDashboard pages
     delete axios.defaults.headers.common['Authorization'];
     router.replace('/login');
   }, [router]);
@@ -52,6 +55,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(parsedUser);
           setRole(parsedUser.role);
           axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+          
+          // Legacy support (Ensure cookies exist on page refresh)
+          const uid = String(parsedUser.user_id || parsedUser.id || "");
+          if (!Cookies.get('user_id')) Cookies.set('user_id', uid);
+          if (!Cookies.get('userId'))  Cookies.set('userId',  uid);
+          if (!Cookies.get('auth_token')) Cookies.set('auth_token', savedToken);
         } catch (e) {
           logout();
         }
@@ -88,6 +97,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
     Cookies.set('virtue_token', newToken, cookieOptions);
     Cookies.set('virtue_user', JSON.stringify(userData), cookieOptions);
+    // Legacy support for different dashbaord pages
+    const uid = String(userData.user_id || userData.id || "");
+    Cookies.set('user_id',    uid, cookieOptions);
+    Cookies.set('userId',     uid, cookieOptions);
+    // Also save as auth_token so all accountsDashboard pages (which use Cookies.get('auth_token')) work
+    Cookies.set('auth_token', newToken, cookieOptions);
 
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 

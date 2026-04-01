@@ -92,6 +92,8 @@ export default function FullSecurePayment() {
         amount: amount,
         payment_date: paymentDate,
         remarks: sanitizeString(remarks),
+        narration: sanitizeString(remarks), // Mapping remarks to narration
+        userId: Cookies.get('user_id'), // Passing user ID
         method: "CASH", // As per your Enum: CASH or BANK_TRANSFER
       };
 

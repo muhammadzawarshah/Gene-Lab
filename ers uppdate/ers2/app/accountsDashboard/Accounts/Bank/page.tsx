@@ -31,31 +31,33 @@ export default function BankCashLedger() {
 
   // --- Auth & API Security Config ---
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const token = Cookies.get('auth_token');
-  const currentUserId = Cookies.get('userId');
-
-  // Secure Axios Instance
-  const secureApi = axios.create({
-    baseURL: API_URL,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Secure-Session-ID': currentUserId, // Security validation header
-      'Content-Type': 'application/json'
-    }
-  });
 
   // --- FETCH LEDGER DATA ---
   const fetchLedger = async () => {
     setIsLoading(true);
     try {
+      const token = Cookies.get('auth_token');
+      const currentUserId = Cookies.get('userId') || Cookies.get('user_id');
       if (!token || !currentUserId) throw new Error("Unauthorized Access");
-      
-      const response = await secureApi.get(`/finance/ledger?userId=${currentUserId}`);
-      setEntries(response.data);
-    } catch (err: any) {
-      toast.error("LEDGER SYNC FAILED", { 
-        description: "Secure gateway blocked the request. Please re-login." 
+
+      const response = await axios.get(`${API_URL}/api/v1/finance/payments`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
+
+      const raw: any[] = response.data?.data || [];
+      const mapped: CashEntry[] = raw.map((p: any) => ({
+        id: String(p.payment_id),
+        date: p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-GB') : '---',
+        description: p.party?.name || 'N/A',
+        category: p.payment_type === 'RECEIPT' ? 'Sales' : 'Supplier',
+        type: p.payment_type === 'RECEIPT' ? 'Inflow' : 'Outflow',
+        method: p.method === 'CASH' ? 'Cash' : 'Bank',
+        amount: parseFloat(p.amount) || 0,
+      }));
+      setEntries(mapped);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Session invalid or unauthorized.";
+      toast.error("LEDGER SYNC FAILED", { description: msg });
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +112,7 @@ export default function BankCashLedger() {
           </h1>
           <div className="flex items-center gap-2 mt-2">
             <ShieldCheck size={12} className="text-emerald-500/50" />
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] italic">Encrypted Financial Vault • User: {currentUserId?.slice(0, 8)}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] italic">Encrypted Financial Vault • User: {(Cookies.get('userId') || Cookies.get('user_id'))?.slice(0, 8)}</p>
           </div>
         </motion.div>
         

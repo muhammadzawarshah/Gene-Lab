@@ -1,104 +1,125 @@
 "use client";
 
-import React, { useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, LogOut, User as UserIcon, ShieldCheck, Zap } from 'lucide-react';
-import { useAuth } from '@/app/context/authcontext'; 
+import { 
+  ChevronDown, LogOut, User as UserIcon, 
+  ShieldCheck, Loader2 
+} from 'lucide-react';
+import Cookies from 'js-cookie';
+import { useAuth } from '@/app/context/authcontext';
 
 export default function Navbar() {
-  const { user, logout } = useAuth(); 
+  const { logout } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [activeUser, setActiveUser] = useState<any>(null);
+  const [isSyncing, setIsSyncing] = useState(true);
 
-  // Dynamic Route Breadcrumb Logic
-  const formatPath = (path: string) => {
-    const segments = path.split('/').filter(Boolean);
-    if (segments.length === 0) return "Dashboard";
-    const lastSegment = segments[segments.length - 1];
-    return lastSegment.replace(/-/g, ' ').toUpperCase();
-  };
+  useEffect(() => {
+    const syncUser = () => {
+      const savedUser = Cookies.get('virtue_user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          // Console log ke mutabiq keys map ho rahi hain
+          setActiveUser(parsed);
+        } catch (e) {
+          console.error("Auth Sync Error", e);
+        }
+      }
+      setIsSyncing(false);
+    };
 
-  // Avatar Initials Logic
-  const getInitials = (name: string) => {
-    if (!name) return "??";
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    syncUser();
+    window.addEventListener('focus', syncUser);
+    return () => window.removeEventListener('focus', syncUser);
+  }, []);
+
+  const currentPathLabel = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length === 0) return "DASHBOARD";
+    return segments[segments.length - 1].replace(/-/g, ' ').toUpperCase();
+  }, [pathname]);
+
+  // Avatar ke liye logic: Agar name nahi hai toh email ka pehla letter use karein
+  const renderAvatar = () => {
+    const displayName = activeUser?.name || activeUser?.useremail || "";
+    if (displayName) {
+      return <span className="text-white font-black text-xs">{displayName[0].toUpperCase()}</span>;
+    }
+    return <UserIcon size={18} className="text-white/50" />;
   };
 
   return (
-    <nav className="h-20 px-4 md:px-8 border-b border-white/[0.05] bg-[#020617]/80 backdrop-blur-xl sticky top-0 z-30 flex items-center justify-between">
+    <nav className="h-20 px-4 md:px-8 border-b border-white/[0.05] bg-[#020617]/80 backdrop-blur-xl sticky top-0 z-[100] flex items-center justify-between">
       
-      {/* 1. Identity & Path */}
-      <div className="flex items-center gap-6">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] font-bold tracking-[0.2em] text-blue-500 uppercase">System Active</span>
-            <div className="h-1 w-1 rounded-full bg-blue-500 animate-ping" />
-          </div>
-          <h1 className="text-sm md:text-lg font-bold text-white tracking-tighter flex items-center gap-2 italic">
-            GENE Labs<span className="text-slate-700 font-light">/</span> 
-            <span className="text-slate-400 text-xs md:text-sm">{formatPath(pathname)}</span>
-          </h1>
+      {/* IDENTITY */}
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-[8px] font-black tracking-[0.3em] text-blue-500 uppercase">System_Active</span>
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
         </div>
+        <h1 className="text-sm md:text-lg font-black text-white tracking-tighter italic uppercase">
+          GENE Labs <span className="text-slate-700 font-thin not-italic">/</span> 
+          <span className="text-blue-600/80 text-xs md:text-sm font-bold ml-2">{currentPathLabel}</span>
+        </h1>
       </div>
 
-      {/* 2. User Profile from AuthContext */}
+      {/* USER SECTION */}
       <div className="relative">
-        <div 
+        <button 
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="flex items-center gap-3 p-1.5 pr-2 md:pr-3 hover:bg-white/[0.03] rounded-2xl cursor-pointer transition-all border border-white/[0.08]"
+          className="flex items-center gap-3 p-1.5 pr-3 hover:bg-white/[0.04] rounded-2xl cursor-pointer transition-all border border-white/5 group"
         >
           <div className="relative">
-            {/* Dynamic Initials from AuthContext */}
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center font-black text-white text-xs shadow-lg shadow-blue-500/20">
-              {getInitials(user?.name)}
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center border border-white/10 shadow-lg">
+              {isSyncing ? <Loader2 size={16} className="animate-spin text-white/30" /> : renderAvatar()}
             </div>
-            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#020617] rounded-full" />
+            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#020617] rounded-full shadow-lg" />
           </div>
 
-          <div className="hidden md:block">
-            {/* Dynamic Name and Role from AuthContext */}
-            <p className="text-xs font-bold text-white leading-none">{user?.name || 'Loading...'}</p>
-            <p className="text-[9px] text-slate-500 mt-1 uppercase tracking-tighter font-medium italic">
-              {user?.role || 'Operator'} • ID: {user?.id}
+          <div className="hidden md:block text-left min-w-[100px]">
+            <p className="text-[11px] font-black text-white uppercase truncate tracking-tight">
+              {/* Check for useremail because name is missing in your object */}
+              {activeUser?.name || activeUser?.useremail?.split('@')[0] || 'Unknown User'}
+            </p>
+            <p className="text-[9px] text-slate-500 uppercase font-bold italic flex items-center gap-1">
+              <ShieldCheck size={10} className="text-blue-500" />
+              {activeUser?.role?.replace(/_/g, ' ') || 'Verifying...'}
             </p>
           </div>
-          <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
-        </div>
+          <ChevronDown className={`w-4 h-4 text-slate-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+        </button>
 
-        {/* Dropdown Menu */}
         <AnimatePresence>
           {isDropdownOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="absolute right-0 mt-4 w-60 bg-slate-950 border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl z-50 p-2"
-            >
-              <div className="p-4 bg-white/[0.02] rounded-2xl mb-2">
-                <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1 italic">Auth Session</p>
-                <p className="text-xs font-bold text-white truncate">{user?.email}</p>
-              </div>
+            <>
+              <div className="fixed inset-0 z-[-1]" onClick={() => setIsDropdownOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 15 }}
+                className="absolute right-0 mt-4 w-64 bg-[#0f172a] border border-white/10 rounded-[2rem] shadow-2xl z-50 p-2"
+              >
+                <div className="p-4 bg-white/[0.03] rounded-[1.5rem] mb-2 border border-white/5">
+                  <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1.5 italic">Session Info</p>
+                  {/* Changed from .email to .useremail */}
+                  <p className="text-xs font-bold text-white truncate">{activeUser?.useremail || 'No email found'}</p>
+                </div>
 
-              <div className="space-y-1">
-                <button className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-bold text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all uppercase tracking-widest">
-                  <UserIcon size={14} className="text-blue-500" /> Profile Settings
-                </button>
                 <button 
-                  onClick={() => { logout(); router.push('/login'); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all uppercase tracking-widest"
+                  onClick={() => { logout(); setIsDropdownOpen(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all uppercase tracking-widest"
                 >
                   <LogOut size={14} /> Terminate Session
                 </button>
-              </div>
-            </motion.div>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>
-
-      {/* Close Dropdown Overlay */}
-      {isDropdownOpen && <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />}
     </nav>
   );
 }

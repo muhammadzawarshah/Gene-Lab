@@ -7,6 +7,7 @@ import { Toaster, toast } from 'sonner';
 import { 
   Edit3, X, Search, Save, User, Eye, Info, Hash, Calendar, DollarSign, Tag, ArrowRightLeft, ShoppingBag
 } from 'lucide-react';
+import { InvoiceComponent } from '@/components/layout/InvoiceComponent';
 
 // --- TYPES ---
 interface OrderItem {
@@ -266,34 +267,40 @@ export default function SaleOrderManagement() {
       )}
 
       {/* VIEW MODAL */}
-      {isViewOpen && selectedOrder && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
-          <div className="bg-[#0f172a] border border-white/10 w-full max-w-2xl rounded-[3.5rem] shadow-2xl overflow-hidden border-t-amber-500 border-t-2">
-            <div className="p-8 border-b border-white/5 flex justify-between items-center">
-               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center font-black italic text-amber-500"><Eye size={20}/></div>
-                <h3 className="text-2xl font-black italic uppercase italic tracking-tighter">Order <span className="text-amber-500">Summary</span></h3>
-              </div>
-              <button onClick={() => setIsViewOpen(false)} className="text-slate-500 hover:text-white transition-all"><X size={24}/></button>
-            </div>
-            <div className="p-10 grid grid-cols-2 gap-10">
-                <DetailItem label="Order Reference" value={`#SO-${selectedOrder.so_id}`} icon={<Hash size={14} className="text-amber-500"/>} />
-                <DetailItem label="Client Name" value={selectedOrder.party.name} icon={<User size={14} className="text-amber-500"/>} />
-                <DetailItem label="Workflow Status" value={selectedOrder.status} icon={<Tag size={14} className="text-amber-500"/>} />
-                <DetailItem label="Creation Date" value={new Date(selectedOrder.order_date).toLocaleDateString()} icon={<Calendar size={14} className="text-amber-500"/>} />
-                <div className="col-span-2 p-6 bg-white/[0.02] rounded-3xl border border-white/5">
-                   <div className="flex justify-between items-center">
-                      <span className="text-xs font-black uppercase text-slate-500">Total Payable Amount</span>
-                      <span className="text-2xl font-black text-emerald-400 font-mono italic">PKR {safeNum(selectedOrder.total_amount).toLocaleString()}</span>
-                   </div>
-                </div>
-            </div>
-            <div className="p-8 border-t border-white/5 bg-white/[0.01] flex justify-center">
-              <button onClick={() => setIsViewOpen(false)} className="px-12 py-4 bg-slate-900 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:border-amber-500 transition-all">Close</button>
-            </div>
-          </div>
+{isViewOpen && selectedOrder && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-y-auto">
+    <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl relative">
+      
+      {/* Modal Toolbar (Sticky) */}
+      <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
+        <h3 className="text-white font-black italic uppercase ml-4">Invoice Preview</h3>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => window.print()} 
+            className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
+          >
+            Print PDF
+          </button>
+          <button 
+            onClick={() => setIsViewOpen(false)} 
+            className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"
+          >
+            <X size={20}/>
+          </button>
         </div>
-      )}
+      </div>
+
+      {/* Invoice Content Area */}
+      <div className="p-6 bg-gray-100 rounded-b-[2rem]">
+         <div id="printable-area">
+            {/* YAHAN HUM COMPONENT CALL KAR RAHE HAIN */}
+            <InvoiceComponent order={selectedOrder} />
+         </div>
+      </div>
+      
+    </div>
+  </div>
+)}
     </div>
   );
 }

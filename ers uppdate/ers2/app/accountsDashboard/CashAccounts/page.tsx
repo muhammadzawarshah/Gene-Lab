@@ -34,28 +34,41 @@ export default function AccountBalances() {
 
   // --- Security Config ---
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
-  const token = Cookies.get('auth_token');
-  const userId = Cookies.get('userId');
-
-  const secureApi = axios.create({
-    baseURL: API_URL,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'x-api-key': API_KEY,
-      'x-user-id': userId
-    }
-  });
 
   // --- Fetch Accounts ---
   const fetchAccounts = async () => {
     setIsLoading(true);
     try {
-      if (!userId || !token) throw new Error("Unauthorized");
-      const res = await secureApi.get(`/accounts?userId=${userId}`);
-      setAccounts(res.data);
-    } catch (err) {
-      toast.error("SECURITY BREACH", { description: "Session invalid or unauthorized access." });
+      const token = Cookies.get('auth_token');
+      const uid = Cookies.get('userId') || Cookies.get('user_id');
+      if (!token || !uid) throw new Error("Unauthorized");
+
+      const res = await axios.get(`${API_URL}/api/v1/finance/account-balance`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const raw: any[] = res.data?.data || [];
+      // Filter to ASSET accounts (bank/cash) and map to Account shape
+      const mapped: Account[] = raw
+        .filter((b: any) => b.type === 'ASSET')
+        .map((b: any) => {
+          const nameLower = (b.name || '').toLowerCase();
+          const isCash = nameLower.includes('cash') || nameLower.includes('petty');
+          return {
+            id: String(b.gl_account_id),
+            name: b.name,
+            type: isCash ? 'Cash' : 'Bank',
+            accountNo: b.code,
+            balance: Number(b.closing_balance) || 0,
+            monthlyInflow: Number(b.debit_total) || 0,
+            monthlyOutflow: Number(b.credit_total) || 0,
+            status: 'Active' as const,
+          };
+        });
+      setAccounts(mapped);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Session invalid.";
+      toast.error("SECURITY BREACH", { description: msg });
     } finally {
       setIsLoading(false);
     }
@@ -122,7 +135,7 @@ export default function AccountBalances() {
           </h1>
           <div className="flex items-center gap-2 mt-2 text-slate-500">
             <Lock size={12} className="text-blue-500" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] italic">Validated Liquidity Node: {userId?.slice(0, 8)}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.4em] italic">Validated Liquidity Node: {(Cookies.get('userId') || Cookies.get('user_id'))?.slice(0, 8)}</p>
           </div>
         </motion.div>
         
@@ -275,7 +288,7 @@ export default function AccountBalances() {
                 <div className="bg-blue-600/5 border border-blue-500/10 p-6 rounded-3xl flex items-start gap-4">
                   <ShieldCheck size={20} className="text-blue-500 shrink-0 mt-1" />
                   <p className="text-[9px] font-bold text-slate-400 leading-relaxed uppercase">
-                    This transaction will be logged with Hash ID and User ID {userId?.slice(0, 12)} for audit purposes. Action is irreversible.
+                    This transaction will be logged with Hash ID and User ID {(Cookies.get('userId') || Cookies.get('user_id'))?.slice(0, 12)} for audit purposes. Action is irreversible.
                   </p>
                 </div>
 

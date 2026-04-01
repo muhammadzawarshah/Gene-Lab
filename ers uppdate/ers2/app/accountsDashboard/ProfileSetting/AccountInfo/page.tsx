@@ -45,28 +45,27 @@ export default function AccountInfo() {
 
   // --- Security & Config ---
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
-  const currentUserId = Cookies.get('userId');
-  const token = Cookies.get('auth_token');
-
-  const secureApi = axios.create({
-    baseURL: API_URL,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'x-api-key': API_KEY,
-      'x-user-id': currentUserId
-    }
-  });
 
   // --- Initial Data Fetch ---
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        if (!currentUserId) throw new Error("UNAUTHORIZED");
-        const response = await secureApi.get(`/user/profile/${currentUserId}`);
-        setProfile(response.data);
-      } catch (err) {
-        toast.error("AUTH ERROR", { description: "Failed to authenticate secure session." });
+        const token = Cookies.get('auth_token');
+        const userId = Cookies.get('userId') || Cookies.get('user_id');
+        if (!token || !userId) throw new Error("UNAUTHORIZED");
+        const response = await axios.get(`${API_URL}/api/v1/users/iduser/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const d = response.data;
+        setProfile(prev => ({
+          ...prev,
+          name: d.username || '',
+          email: d.email || '',
+          distributorId: String(d.user_id || ''),
+        }));
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || err?.message || "Failed to load profile.";
+        toast.error("AUTH ERROR", { description: msg });
       } finally {
         setIsLoading(false);
       }
@@ -76,30 +75,21 @@ export default function AccountInfo() {
 
   // --- Secure Logic: Handle Save ---
   const handleSave = async () => {
-    // 1. Data Sanitization (Anti-Injection)
-    const sanitize = (str: string) => str.replace(/[<>{}[]$]/g, "").trim();
-
-    const sanitizedData = {
-      ...profile,
-      name: sanitize(profile.name),
-      businessName: sanitize(profile.businessName),
-      address: sanitize(profile.address),
-      phone: profile.phone.replace(/[^\d+-\s]/g, "") // Allow only phone chars
-    };
-
     setIsSaving(true);
     const loadingToast = toast.loading("SYNCING WITH NEXUS...");
-
     try {
-      await secureApi.put(`/user/profile/update`, {
-        uid: currentUserId,
-        data: sanitizedData
+      const token = Cookies.get('auth_token');
+      const userId = Cookies.get('userId') || Cookies.get('user_id');
+      await axios.post(`${API_URL}/api/v1/users/profile/${userId}`, {
+        username: profile.name.replace(/[<>{}$]/g, "").trim(),
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-
-      toast.success("PROFILE ENCRYPTED", { description: "Your business credentials have been updated." });
+      toast.success("PROFILE UPDATED", { description: "Your credentials have been updated." });
       setIsEditing(false);
-    } catch (err) {
-      toast.error("SYNC FAILED", { description: "Secure server rejected the update." });
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Server rejected the update.";
+      toast.error("SYNC FAILED", { description: msg });
     } finally {
       setIsSaving(false);
       toast.dismiss(loadingToast);

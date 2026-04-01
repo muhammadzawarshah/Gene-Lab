@@ -81,7 +81,7 @@ export default function SecureWarehouseRegistry() {
     if (authToken) fetchProvinces();
   }, [api, authToken]);
 
-  // Handle Province Change & Prefix Generation
+  // Handle Province Change: auto-generate code + load districts
   useEffect(() => {
     if (!formData.provinceId) {
       setDistricts([]);
@@ -89,29 +89,34 @@ export default function SecureWarehouseRegistry() {
       return;
     }
 
-    // Yahan ID se Province Object dhund rahe hain taake Name mil sake
     const selectedProvince = provinces.find(p => p.province_id.toString() === formData.provinceId.toString());
-    
-    if (selectedProvince) {
-      const prefix = getProvinceShortCode(selectedProvince.name);
-      setFormData(prev => ({ 
-        ...prev, 
-        warehouseCode: prefix 
-      }));
-    }
+    if (!selectedProvince) return;
 
-    const fetchDistricts = async () => {
+    const prefix = getProvinceShortCode(selectedProvince.name);
+
+    const fetchAll = async () => {
       setDistrictsLoading(true);
       try {
-        const res = await api.get(`/api/locations/districts?provinceId=${formData.provinceId}`);
-        setDistricts(res.data);
+        const [distRes, whRes] = await Promise.all([
+          api.get(`/api/v1/district?provinceId=${formData.provinceId}`),
+          api.get('/api/v1/warehouse/list')
+        ]);
+        setDistricts(distRes.data.data || []);
+
+        // Count warehouses already in this province to generate next number
+        const allWarehouses: any[] = whRes.data.data || [];
+        const provinceCount = allWarehouses.filter(
+          w => w.location === parseInt(formData.provinceId)
+        ).length;
+        const nextNum = (provinceCount + 1).toString().padStart(3, '0');
+        setFormData(prev => ({ ...prev, warehouseCode: `${prefix}${nextNum}` }));
       } catch (err) {
-        toast.error("Failed to load secure region data.");
+        toast.error("Failed to load region data.");
       } finally {
         setDistrictsLoading(false);
       }
     };
-    fetchDistricts();
+    fetchAll();
   }, [formData.provinceId, api, provinces]);
 
   const filteredDistricts = useMemo(() => {
@@ -134,20 +139,13 @@ export default function SecureWarehouseRegistry() {
     setIsSubmitting(true);
     try {
       const securePayload = {
-        warehouseCode: formData.warehouseCode.toUpperCase(),
         name: formData.name,
-        provinceId: parseInt(formData.provinceId),
-        districtId: formData.districtId,
-        city: formData.city,
-        address: formData.address,
-        metadata: {
-          client_ts: new Date().toISOString(),
-          actor_id: currentUserId,
-          entry_point: "SecureRegistry_V2"
-        }
+        locationId: parseInt(formData.provinceId),
+        districtId: formData.districtId ? parseInt(formData.districtId) : undefined,
+        type: formData.warehouseCode.toUpperCase(),
       };
 
-      await api.post('/api/warehouses/create', securePayload);
+      await api.post('/api/v1/warehouse/create', securePayload);
       toast.success("Entry Committed", { icon: <ShieldCheck className="text-emerald-400" /> });
       
       setFormData({ warehouseCode: '', name: '', city: '', districtId: '', districtName: '', address: '', provinceId: '' });
@@ -263,9 +261,9 @@ export default function SecureWarehouseRegistry() {
                       <div className="max-h-48 overflow-y-auto">
                         {filteredDistricts.map(d => (
                           <div 
-                            key={d.id} 
+                            key={d.district_id}
                             onClick={() => {
-                              setFormData(prev => ({ ...prev, districtId: d.id, districtName: d.name }));
+                              setFormData(prev => ({ ...prev, districtId: d.district_id, districtName: d.name }));
                               setIsDistrictOpen(false);
                             }}
                             className="p-3 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-white/5"

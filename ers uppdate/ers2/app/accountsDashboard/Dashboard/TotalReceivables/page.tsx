@@ -43,7 +43,7 @@ export default function ReceivablesPage() {
     const fetchReceivables = async () => {
       try {
         setLoading(true);
-        const userId = Cookies.get('userId');
+        const userId = Cookies.get('userId') || Cookies.get('user_id');
         const token = Cookies.get('auth_token');
 
         if (!userId) {
@@ -51,7 +51,7 @@ export default function ReceivablesPage() {
           return;
         }
 
-        const response = await axios.get(`${API_BASE_URL}/accounts/receivables`, {
+        const response = await axios.get(`${API_BASE_URL}/api/v1/accounts/receivables`, {
           params: { userId },
           headers: { 'Authorization': `Bearer ${token}` }
         });

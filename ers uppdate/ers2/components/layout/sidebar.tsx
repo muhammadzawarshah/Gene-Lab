@@ -126,8 +126,8 @@ export default function Sidebar() {
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden ml-9 border-l border-white/5"
                   >
-                    {section.items?.map((item: any) => (
-                      <div key={item.id} className="mt-1">
+                    {section.items?.map((item: any, idx: number) => (
+                      <div key={item.id ?? item.label ?? idx} className="mt-1">
                         {item.type === 'nested' ? (
                           <div className="pl-2">
                             <button 

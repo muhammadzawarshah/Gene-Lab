@@ -36,7 +36,7 @@ export default function PendingPayments() {
     const fetchPendingPayments = async () => {
       try {
         setLoading(true);
-        const userId = Cookies.get('userId');
+        const userId = Cookies.get('userId') || Cookies.get('user_id');
         const token = Cookies.get('auth_token');
 
         if (!userId) {
@@ -44,7 +44,7 @@ export default function PendingPayments() {
           return;
         }
 
-        const response = await axios.get(`${API_BASE_URL}/accounts/pending-payments`, {
+        const response = await axios.get(`${API_BASE_URL}/api/v1/accounts/pending-payments`, {
           params: { userId },
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -64,7 +64,7 @@ export default function PendingPayments() {
   const handleAction = async (paymentId: string, action: 'approve' | 'reject') => {
     try {
       const token = Cookies.get('auth_token');
-      await axios.post(`${API_BASE_URL}/accounts/verify-payment`, {
+      await axios.post(`${API_BASE_URL}/api/v1/accounts/verify-payment`, {
         paymentId,
         action,
         userId: Cookies.get('userId')

@@ -9,6 +9,7 @@ import {
   Clock, Banknote, Filter, PackageCheck, Hash, User, LayoutPanelLeft
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { InvoiceComponent } from '@/components/layout/InvoiceComponent';
 
 export default function PurchaseOrderConsole() {
   const currentUserId = Cookies.get('userId') || 'GUEST_USER';
@@ -184,7 +185,9 @@ export default function PurchaseOrderConsole() {
                 <tr key={order.id} onClick={() => setViewDetail(order)} className="group hover:bg-blue-600/[0.06] cursor-pointer transition-all duration-300">
                   <td className="px-10 py-6 text-[11px] text-slate-600 font-mono">{idx + 1}</td>
                   <td className="px-10 py-6 text-sm text-white font-black italic tracking-tight">#{order.purchaseNo}</td>
-                  <td className="px-10 py-6 text-sm text-slate-400">{new Date(order.date).toLocaleDateString()}</td>
+                  <td className="px-10 py-6 text-sm text-slate-400">
+                    {order.date ? new Date(order.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '---'}
+                  </td>
                   <td className="px-10 py-6 text-[11px] text-blue-400 font-mono uppercase truncate max-w-[200px]">{order.supplierName}</td>
                   <td className="px-10 py-6 text-sm font-mono text-white font-black">PKR {order.grossTotal?.toLocaleString()}</td>
                   <td className="px-10 py-6">
@@ -196,7 +199,7 @@ export default function PurchaseOrderConsole() {
                   <td className="px-10 py-6">
                     <div className="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => { e.stopPropagation(); setEditItem(order); }} className="p-2.5 bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white cursor-pointer transition-all"><Edit size={16} /></button>
-                      <button onClick={(e) => handleDelete(e, order.id)} className="p-2.5 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-600 hover:text-white cursor-pointer transition-all"><Trash2 size={16} /></button>
+                      {/* <button onClick={(e) => handleDelete(e, order.id)} className="p-2.5 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-600 hover:text-white cursor-pointer transition-all"><Trash2 size={16} /></button> */}
                     </div>
                   </td>
                 </tr>
@@ -208,52 +211,39 @@ export default function PurchaseOrderConsole() {
 
       {/* --- DETAILS MODAL --- */}
       {viewDetail && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-6" onClick={() => setViewDetail(null)}>
-          <div className="w-full max-w-2xl bg-[#010413] border border-blue-500/20 rounded-[3rem] shadow-3xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-              <div className="flex items-center gap-4">
-                <div className="bg-blue-600 p-3 rounded-2xl"><ReceiptText size={24} className="text-white"/></div>
-                <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">PO_DETAILS <span className="text-blue-600">#{viewDetail.purchaseNo}</span></h2>
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-y-auto">
+                <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl relative">
+      
+                  {/* Modal Toolbar (Sticky) */}
+                  <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
+                    <h3 className="text-white font-black italic uppercase ml-4">Invoice Preview</h3>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => window.print()}
+                        className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
+                      >
+                        Print PDF
+                      </button>
+                      <button
+                        onClick={() => setViewDetail(null)}
+                        className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                  </div>
+      
+                  {/* Invoice Content Area */}
+                  <div className="p-6 bg-gray-100 rounded-b-[2rem]">
+                    <div id="printable-area">
+                      {/* YAHAN HUM COMPONENT CALL KAR RAHE HAIN */}
+                      <InvoiceComponent order={viewDetail} />
+                    </div>
+                  </div>
+      
+                </div>
               </div>
-              <button onClick={() => setViewDetail(null)} className="p-2 hover:bg-rose-500/20 text-slate-400 rounded-xl cursor-pointer"><X size={24} /></button>
-            </div>
-            
-            <div className="p-10 grid grid-cols-1 md:grid-cols-2 gap-8 overflow-y-auto max-h-[70vh]">
-               <div className="space-y-6">
-                  <div className="bg-white/5 p-8 rounded-[2rem] border border-white/5 relative overflow-hidden">
-                    <Banknote className="absolute -right-4 -bottom-4 text-white/5" size={100} />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Order Value</span>
-                    <p className="text-4xl font-black text-white font-mono italic tracking-tighter">PKR {viewDetail.grossTotal?.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-blue-600/5 p-8 rounded-[2rem] border border-blue-500/20">
-                    <span className="text-[10px] font-bold text-blue-500 uppercase block mb-2 tracking-widest">Supplier Name</span>
-                    <p className="text-lg font-bold text-white uppercase">{viewDetail.supplierName}</p>
-                  </div>
-               </div>
-
-               <div className="space-y-4">
-                  <div className="bg-white/5 p-6 rounded-2xl border border-white/5 flex justify-between items-center">
-                    <span className="text-[11px] text-slate-500 font-bold uppercase flex items-center gap-3"><Clock size={16} className="text-blue-500"/> Issue Date</span>
-                    <p className="text-sm text-white font-black">{new Date(viewDetail.date).toLocaleDateString()}</p>
-                  </div>
-                  <div className="bg-white/5 p-6 rounded-2xl border border-white/5 flex justify-between items-center">
-                    <span className="text-[11px] text-slate-500 font-bold uppercase flex items-center gap-3"><PackageCheck size={16} className="text-emerald-500"/> Status</span>
-                    <p className="text-[10px] text-emerald-400 font-black uppercase border border-emerald-500/30 px-4 py-1.5 rounded-full bg-emerald-500/5">{viewDetail.status}</p>
-                  </div>
-                  <div className="bg-white/5 p-6 rounded-2xl border border-white/5 flex justify-between items-center">
-                    <span className="text-[11px] text-slate-500 font-bold uppercase flex items-center gap-3"><Hash size={16} className="text-amber-500"/> ID Code</span>
-                    <p className="text-xs text-blue-400 font-mono font-bold">{viewDetail.id}</p>
-                  </div>
-               </div>
-            </div>
-
-            <div className="p-8 border-t border-white/5 bg-white/[0.02] flex gap-4">
-               <button onClick={() => { setEditItem(viewDetail); setViewDetail(null); }} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-500 cursor-pointer shadow-xl transition-all">EDIT REGISTRY</button>
-               <button onClick={() => setViewDetail(null)} className="px-10 py-5 bg-white/5 text-slate-400 rounded-2xl text-[11px] font-black uppercase hover:bg-white/10 cursor-pointer border border-white/5">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+            )}
 
       {/* --- EDIT MODAL (Full Control) --- */}
       {editItem && (

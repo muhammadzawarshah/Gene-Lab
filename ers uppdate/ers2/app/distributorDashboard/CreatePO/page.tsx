@@ -1,304 +1,282 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
-import { 
-  Plus, Trash2, ShoppingBag, Send, 
-  Calculator, ChevronDown, Loader2, ShieldAlert
+import {
+  Trash2, Layers, Loader2,
+  Calculator, Wallet, ShieldCheck, ShoppingBag
 } from 'lucide-react';
-import { cn } from "@/lib/utils";
 
-interface Category {
-  product_category_id: number;
-  category: string;
-}
-
-interface Product {
-  product_id: string;
-  name: string;
-  productprice: { unit_price: string }[];
-  uom_id: number; // Backend needs uom_id
-}
-
+// --- TYPES ---
+interface Category { product_category_id: string; category: string; }
+interface Product  { product_id: string; name: string; }
 interface POItem {
-  categoryId: string;
-  productId: string;
-  quantity: number;
-  price: number;
-  total: number;
-  uomId: number; // Added for backend compatibility
-  availableProducts: Product[];
-  isLoadingProducts: boolean;
+  category_id: string;
+  product_id: string;
+  total_unit: number;
+  approved_rate: number;
+  amount: number;
 }
+
+const emptyRow = (): POItem => ({
+  category_id: '', product_id: '',
+  total_unit: 0, approved_rate: 0, amount: 0,
+});
 
 export default function CreatePO() {
-  const [items, setItems] = useState<POItem[]>([
-    { categoryId: '', productId: '', quantity: 1, price: 0, total: 0, uomId: 0, availableProducts: [], isLoadingProducts: false }
-  ]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loadingCats, setLoadingCats] = useState(true);
+  const [categories,   setCategories]   = useState<Category[]>([]);
+  const [productsMap,  setProductsMap]  = useState<Record<string, Product[]>>({});
+  const [rows,         setRows]         = useState<POItem[]>([emptyRow(), emptyRow(), emptyRow()]);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
-  const token = Cookies.get('auth_token');
+  const currentUserId = Cookies.get('userId') || Cookies.get('user_id') || '';
+  const token         = Cookies.get('auth_token');
+  const API           = process.env.NEXT_PUBLIC_API_URL;
 
-  const currentUserId = useMemo(() => {
-    const rawUser = Cookies.get('virtue_user');
-    if (!rawUser) return null;
-    try {
-      const decoded = decodeURIComponent(rawUser);
-      return JSON.parse(decoded).id;
-    } catch (err) { return null; }
-  }, []);
-
-  const secureApi = axios.create({
-    baseURL: API_URL,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'x-api-key': API_KEY,
-      'x-user-id': currentUserId,
-      'Content-Type': 'application/json'
-    }
-  });
-
+  // ── Fetch categories on mount ───────────────────────────────────────────────
   useEffect(() => {
-    const fetchCats = async () => {
-      try {
-        setLoadingCats(true);
-        const res = await secureApi.get('/api/v1/category/');
-        if (res.data && res.data.category) {
-          setCategories(res.data.category);
-        }
-      } catch (err) {
-        toast.error("SYSTEM ERROR", { description: "Categories load nahi ho sakiin." });
-      } finally {
-        setLoadingCats(false);
-      }
-    };
-    fetchCats();
-  }, []);
+    if (!token) return;
+    const h = { Authorization: `Bearer ${token}` };
+    axios.get(`${API}/api/v1/category/`, { headers: h })
+      .then(r => setCategories(r.data.category || []))
+      .catch(() => toast.error("Category fetch failed"));
+  }, [token]);
 
-  const fetchProductsByCategoryId = async (index: number, catId: string) => {
+  // ── Fetch products by category (cached) ────────────────────────────────────
+  const fetchProducts = async (catId: string) => {
+    if (!catId || productsMap[catId]) return;
     try {
-      const res = await secureApi.get(`/api/v1/product/category/${catId}`);
-      setItems(prev => {
-        const updated = [...prev];
-        updated[index].availableProducts = res.data || [];
-        updated[index].isLoadingProducts = false;
-        return updated;
+      const res = await axios.get(`${API}/api/v1/product/category/${catId}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-    } catch (err) {
-      toast.error("PRODUCT ERROR", { description: "Items fetch karne mein masla hua." });
-      setItems(prev => {
-        const updated = [...prev];
-        updated[index].isLoadingProducts = false;
-        return updated;
-      });
-    }
+      setProductsMap(prev => ({ ...prev, [catId]: res.data }));
+    } catch { toast.error("Product fetch failed"); }
   };
 
-  const updateItem = (index: number, field: keyof POItem, value: any) => {
-    const updatedItems = [...items];
-    const current = { ...updatedItems[index] };
-
-    if (field === 'categoryId') {
-      current.categoryId = value;
-      current.productId = '';
-      current.price = 0;
-      current.total = 0;
-      current.availableProducts = [];
-      if (value) {
-        current.isLoadingProducts = true;
-        updatedItems[index] = current;
-        setItems(updatedItems);
-        fetchProductsByCategoryId(index, value);
-      } else {
-        updatedItems[index] = current;
-        setItems(updatedItems);
+  // ── Auto-fetch WHOLESALE price when product selected ───────────────────────
+  const fetchPrice = async (index: number, productId: string) => {
+    if (!productId) return;
+    try {
+      const res = await axios.get(`${API}/api/v1/productprice/lookup`, {
+        params: { product_id: productId, price_type: 'WHOLESALE' },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success && res.data.data) {
+        const rate = parseFloat(res.data.data.unit_price);
+        setRows(prev => {
+          const next = [...prev];
+          next[index] = { ...next[index], approved_rate: rate, amount: (next[index].total_unit || 0) * rate };
+          return next;
+        });
       }
-    } 
-    else if (field === 'productId') {
-      const prod = current.availableProducts.find(p => p.product_id === value);
-      current.productId = value;
-      current.price = parseFloat(prod?.productprice?.[0]?.unit_price || "0");
-      current.uomId = prod?.uom_id || 0; // Capture UOM for backend
-      current.total = current.quantity * current.price;
-      updatedItems[index] = current;
-      setItems(updatedItems);
-    } 
-    else if (field === 'quantity') {
-      current.quantity = Math.max(1, value);
-      current.total = current.quantity * current.price;
-      updatedItems[index] = current;
-      setItems(updatedItems);
-    }
+    } catch { /* price stays 0 if lookup fails */ }
   };
 
-  const addItem = () => setItems([...items, { categoryId: '', productId: '', quantity: 1, price: 0, total: 0, uomId: 0, availableProducts: [], isLoadingProducts: false }]);
-  
-  const removeItem = (index: number) => {
-    const filtered = items.filter((_, i) => i !== index);
-    setItems(filtered.length ? filtered : [{ categoryId: '', productId: '', quantity: 1, price: 0, total: 0, uomId: 0, availableProducts: [], isLoadingProducts: false }]);
+  // ── Row change handler ─────────────────────────────────────────────────────
+  const handleInputChange = (index: number, field: keyof POItem, value: any) => {
+    setRows(prev => {
+      const rows = [...prev];
+      const row  = { ...rows[index], [field]: value };
+
+      if (field === 'category_id') {
+        row.product_id    = '';
+        row.approved_rate = 0;
+        row.amount        = 0;
+        fetchProducts(value);
+      }
+
+      if (field === 'product_id' && value) {
+        row.approved_rate = 0;
+        row.amount        = 0;
+        rows[index] = row;
+        setRows([...rows]);
+        fetchPrice(index, value);
+        // auto-add new empty row when last row gets a product
+        if (index === rows.length - 1) return [...rows, emptyRow()];
+        return rows;
+      }
+
+      if (field === 'total_unit' || field === 'approved_rate') {
+        row.amount = (Number(field === 'total_unit' ? value : row.total_unit) || 0)
+                   * (Number(field === 'approved_rate' ? value : row.approved_rate) || 0);
+      }
+
+      rows[index] = row;
+      return rows;
+    });
   };
 
-  const grandTotal = items.reduce((acc, curr) => acc + curr.total, 0);
+  const removeRow = (index: number) => {
+    if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
+  };
 
-  const handleSubmit = async () => {
-    if (isSubmitting) return;
+  // ── Totals ──────────────────────────────────────────────────────────────────
+  const grossTotal = useMemo(() => rows.reduce((s, r) => s + (r.amount || 0), 0), [rows]);
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  const handleFinalize = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validItems = rows.filter(r => r.product_id !== '');
+    if (!validItems.length) return toast.error("Kam az kam ek product select karein.");
+
     setIsSubmitting(true);
     try {
-      // BACKEND MAPPING: Using 'qty' instead of 'quantity' as per your function
-      const payload = {
-        createdBy: currentUserId,
-        items: items.map(i => ({ 
-          productId: i.productId, 
-          qty: i.quantity, // Your backend expects item.qty
-          price: i.price,
-          uomId: i.uomId // Your backend uses Number(item.uomId)
+      await axios.post(`${API}/api/v1/distribution/custsales-order`, {
+        createdBy:   Number(currentUserId),
+        items:       validItems.map(r => ({
+          productId: r.product_id,
+          qty:       r.total_unit,
+          price:     r.approved_rate,
         })),
-        totalAmount: grandTotal,
-        timestamp: new Date().toISOString()
-      };
-      
-      await secureApi.post('/api/v1/distribution/custsales-order', payload);
-      toast.success("PO SUCCESS", { description: "Order submit ho gaya hai." });
-      setItems([{ categoryId: '', productId: '', quantity: 1, price: 0, total: 0, uomId: 0, availableProducts: [], isLoadingProducts: false }]);
+        totalAmount: grossTotal,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+
+      toast.success("Purchase order submitted", { icon: <ShieldCheck className="text-emerald-500" /> });
+      setRows([emptyRow(), emptyRow(), emptyRow()]);
     } catch (err: any) {
-      toast.error("FAILED", { description: err.response?.data?.message || "Submission mein error aaya." });
+      toast.error(err?.response?.data?.message || "Submission failed");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- UI Renders exactly as requested ---
+  const thCls  = "text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] p-4 border-b border-white/5";
+  const inpCls = "w-full bg-[#0f172a] border border-slate-800 rounded-xl py-3 px-3 text-white focus:border-blue-500 outline-none transition-all text-xs font-medium appearance-none";
+
   return (
-    <div className="min-h-screen p-8 text-slate-200 bg-[#020617] font-sans">
+    <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
       <Toaster position="top-right" theme="dark" richColors />
-      
-      <div className="mb-10 flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-black uppercase italic text-white flex items-center gap-3">
-            <Plus className="text-blue-500 w-8 h-8 p-1 bg-blue-500/10 rounded-lg shadow-lg" />
-            Purchase <span className="text-blue-500">ORDERS</span>
+
+      {/* HEADER */}
+      <div className="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-8 border-l-8 border-blue-600 pl-6">
+        <div className="flex-1">
+          <h1 className="text-6xl font-black text-white uppercase tracking-tighter italic leading-none">
+            Purchase <span className="text-blue-600">Order</span>
           </h1>
-          <p className="text-slate-500 text-[9px] font-bold uppercase tracking-[0.4em] mt-2">Inventory Management System</p>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.4em] mt-4 flex items-center gap-2 italic">
+            <Layers size={14} className="text-blue-500" /> USER_ID: {currentUserId}
+          </p>
         </div>
-        <div className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl flex items-center gap-6">
-          <div className="text-right border-r border-white/10 pr-6">
-            <p className="text-[10px] font-black text-slate-500 uppercase">Subtotal</p>
-            <p className="text-xl font-black text-blue-500 italic">PKR {grandTotal.toLocaleString()}</p>
+
+        <div className="w-full lg:w-96 relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000" />
+          <div className="relative bg-[#020617] rounded-2xl border border-white/10 p-4 flex items-center gap-4">
+            <ShoppingBag className="text-blue-500" size={22} />
+            <div>
+              <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest italic">Ordering From</p>
+              <p className="text-sm font-black text-white uppercase italic">Gene Laboratories (PVT) Ltd.</p>
+            </div>
           </div>
-          <Calculator className="text-blue-500 opacity-50" />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-4">
-          <AnimatePresence mode="popLayout">
-            {items.map((item, index) => (
-              <motion.div key={index} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="p-6 rounded-[2rem] border border-white/5 bg-white/[0.02] group hover:bg-white/[0.04] transition-all">
-                <div className="flex flex-col md:flex-row gap-6">
-                  <div className="flex-1 space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Category</label>
-                    <div className="relative">
-                      <select 
-                        value={item.categoryId}
-                        onChange={(e) => updateItem(index, 'categoryId', e.target.value)}
-                        className="w-full bg-[#020617] border border-white/10 rounded-2xl py-3 px-4 text-xs font-bold text-white appearance-none focus:border-blue-500/50 outline-none"
-                      >
-                        <option value="">{loadingCats ? "Fetching..." : "Select Category"}</option>
-                        {categories.map((cat) => (
-                          <option key={cat.product_category_id} value={cat.product_category_id}>{cat.category}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                    </div>
-                  </div>
+      <form onSubmit={handleFinalize} className="bg-[#020617] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-white/[0.02]">
+                <th className="w-12 p-4 text-center text-[10px] font-black text-slate-600 uppercase tracking-widest italic">S#</th>
+                <th className={thCls}>Category</th>
+                <th className={thCls}>Product</th>
+                <th className={thCls}>Qty</th>
+                <th className={thCls}>Rate (Wholesale)</th>
+                <th className={thCls}>Amount</th>
+                <th className="w-12" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {rows.map((row, index) => (
+                <tr key={`row-${index}`} className="group hover:bg-blue-600/[0.02] transition-all">
+                  <td className="p-4 text-center font-black text-slate-700 text-xs italic">{index + 1}</td>
 
-                  <div className="flex-[2] space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Material Description</label>
-                    <div className="relative">
-                      <select 
-                        disabled={!item.categoryId || item.isLoadingProducts}
-                        value={item.productId}
-                        onChange={(e) => updateItem(index, 'productId', e.target.value)}
-                        className={cn(
-                          "w-full bg-[#020617] border border-white/10 rounded-2xl py-3 px-4 text-xs font-bold text-white appearance-none outline-none transition-all",
-                          (!item.categoryId || item.isLoadingProducts) ? "opacity-30 cursor-not-allowed" : "focus:border-blue-500/50"
-                        )}
-                      >
-                        <option value="">
-                          {item.isLoadingProducts ? "Syncing Database..." : item.categoryId ? "Choose Product" : "← Select Category First"}
-                        </option>
-                        {item.availableProducts.map((p) => (
-                          <option key={p.product_id} value={p.product_id}>{p.name}</option>
-                        ))}
-                      </select>
-                      {item.isLoadingProducts ? <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-blue-500" /> : <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />}
-                    </div>
-                  </div>
-                </div>
+                  {/* Category */}
+                  <td className="p-2 w-48">
+                    <select className={inpCls} value={row.category_id}
+                      onChange={e => handleInputChange(index, 'category_id', e.target.value)}>
+                      <option value="">Category</option>
+                      {categories.map(c => (
+                        <option key={c.product_category_id} value={c.product_category_id} className="bg-[#0f172a]">{c.category}</option>
+                      ))}
+                    </select>
+                  </td>
 
-                <div className="flex items-center justify-between border-t border-white/5 mt-6 pt-4">
-                  <div className="flex items-center gap-4">
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-black text-slate-500 uppercase">Qty</p>
-                      <input 
-                        type="number" value={item.quantity} 
-                        onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                        className="w-20 bg-white/[0.03] border border-white/10 rounded-xl py-2 px-3 text-xs font-bold text-white outline-none focus:border-blue-500/50"
-                      />
+                  {/* Product */}
+                  <td className="p-2 w-56">
+                    <select className={inpCls + " disabled:opacity-30"} value={row.product_id}
+                      disabled={!row.category_id}
+                      onChange={e => handleInputChange(index, 'product_id', e.target.value)}>
+                      <option value="">Product</option>
+                      {(productsMap[row.category_id] || []).map(p => (
+                        <option key={p.product_id} value={p.product_id} className="bg-[#0f172a]">{p.name}</option>
+                      ))}
+                    </select>
+                  </td>
+
+                  {/* Qty */}
+                  <td className="p-2 w-28">
+                    <input type="number" className={inpCls + " text-center"} value={row.total_unit || ''}
+                      onChange={e => handleInputChange(index, 'total_unit', e.target.value)} />
+                  </td>
+
+                  {/* Rate (auto-filled, not editable) */}
+                  <td className="p-2 w-36">
+                    <div className="w-full bg-[#0a0f1e] border border-slate-800/50 rounded-xl py-3 px-3 text-right text-blue-400 font-mono text-xs select-none cursor-not-allowed">
+                      {row.approved_rate ? row.approved_rate.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                       <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Row Total</p>
-                       <p className="text-sm font-black text-white italic">PKR {item.total.toLocaleString()}</p>
-                    </div>
-                    <button onClick={() => removeItem(index)} className="p-3 rounded-2xl bg-rose-500/5 text-rose-500 hover:bg-rose-500/10 transition-all">
-                      <Trash2 size={18} />
+                  </td>
+
+                  {/* Amount */}
+                  <td className="p-4 text-right text-xs font-black text-white italic">{row.amount.toLocaleString()}</td>
+
+                  <td className="p-2">
+                    <button type="button" onClick={() => removeRow(index)}
+                      className="p-2 text-slate-800 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
+                      <Trash2 size={16} />
                     </button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          <button onClick={addItem} className="w-full py-5 border-2 border-dashed border-white/5 rounded-[2rem] text-slate-500 hover:text-blue-500 hover:border-blue-500/20 hover:bg-blue-500/5 transition-all font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-2">
-            <Plus size={16} /> Add New Row
-          </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div className="lg:col-span-1">
-          <div className="sticky top-8 p-8 rounded-[2.5rem] border border-white/5 bg-gradient-to-br from-blue-600/10 to-transparent backdrop-blur-3xl shadow-2xl">
-            <div className="flex items-center gap-3 mb-8">
-              <ShoppingBag className="w-5 h-5 text-blue-500" />
-              <h3 className="text-sm font-black uppercase tracking-widest text-white">Confirmation</h3>
+        {/* SUMMARY */}
+        <div className="flex justify-end p-10 bg-white/[0.01] border-t border-white/5">
+          <div className="bg-slate-900/50 rounded-[2rem] p-8 border border-white/5 space-y-4 shadow-inner w-full max-w-sm">
+            <div className="flex justify-between items-center text-slate-500 text-[10px] font-bold uppercase tracking-widest italic">
+              <span>Gross Subtotal</span>
+              <span className="text-white">PKR {grossTotal.toLocaleString()}</span>
             </div>
-            <div className="space-y-4 mb-8">
-              <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase">
-                <span>Total Lines</span>
-                <span className="text-white">{items.length}</span>
-              </div>
-              <div className="h-px bg-white/5 my-4" />
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Net Payable</span>
-                <span className="text-2xl font-black text-white tracking-tighter italic">PKR {grandTotal.toLocaleString()}</span>
-              </div>
+            <div className="flex justify-between items-center pt-2 border-t border-white/5">
+              <span className="text-white font-black text-sm uppercase italic">Total Payable</span>
+              <span className="text-4xl font-black text-blue-500 italic tracking-tighter">
+                PKR {grossTotal.toLocaleString()}
+              </span>
             </div>
-            <button 
-              onClick={handleSubmit} 
-              disabled={isSubmitting || grandTotal === 0}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 disabled:opacity-20"
-            >
-              {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <><Send size={16} /> Submit Order</>}
+          </div>
+        </div>
+
+        {/* FOOTER */}
+        <div className="p-10 bg-[#020617] border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-4 bg-white/5 px-8 py-4 rounded-full border border-white/5">
+            <Calculator className="text-blue-500" size={20} />
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest italic">Gene Laboratories (PVT) Ltd.</span>
+          </div>
+          <div className="flex gap-4 w-full md:w-auto">
+            <button type="button"
+              onClick={() => setRows([emptyRow(), emptyRow(), emptyRow()])}
+              className="flex-1 md:flex-none bg-white/5 text-slate-500 font-black px-10 py-5 rounded-2xl uppercase text-[10px] tracking-widest border border-white/5 hover:bg-rose-500/10 hover:text-rose-500 transition-all">
+              Clear Form
+            </button>
+            <button type="submit" disabled={isSubmitting}
+              className="flex-2 md:flex-none bg-blue-600 hover:bg-blue-500 text-white font-black px-16 py-5 rounded-2xl uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20 disabled:opacity-50">
+              {isSubmitting ? <Loader2 className="animate-spin" /> : <><Wallet size={18} /> Submit Purchase Order</>}
             </button>
           </div>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

@@ -1,247 +1,272 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { motion } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
-import { 
-  BarChart3, PieChart, TrendingUp, Download, 
-  Calendar, ArrowUpRight, ArrowDownRight, 
-  Activity, Globe, Target, FileJson, Loader2
+import {
+  BarChart3, TrendingUp, ShoppingCart, PackageCheck,
+  Truck, Boxes, Clock, Activity, Loader2, RefreshCw,
+  FileText, Users, ArrowUpRight
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
-// --- API CONFIG ---
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
 
-interface AnalyticsData {
-  kpis: { label: string; value: string; trend: string; up: boolean }[];
-  salesTrajectory: number[];
-  regionalSpread: { region: string; val: number; color: string }[];
+interface DashboardData {
+  kpis: {
+    totalSalesAmount: number;
+    totalSalesCount: number;
+    totalPurchaseAmount: number;
+    totalPurchaseCount: number;
+    totalGRN: number;
+    totalDeliveries: number;
+    totalProducts: number;
+    totalStockOnHand: number;
+    pendingSalesOrders: number;
+  };
+  monthlySales: { month: string; label: string; total: number; count: number }[];
+  topProducts: { product_id: string; name: string; revenue: number; qty: number }[];
+  recentInvoices: { number: string | null; party: string; amount: number; date: string; status: string }[];
 }
 
+const fmt = (n: number) =>
+  n >= 1_000_000
+    ? `${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000
+    ? `${(n / 1_000).toFixed(1)}K`
+    : n.toFixed(0);
+
+const fmtPKR = (n: number) => `PKR ${fmt(n)}`;
+
 export default function ReportsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [timeframe, setTimeframe] = useState("Last 30 Days");
+  const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Security Context
-  const currentUserId = Cookies.get('userId');
-  const authToken = Cookies.get('auth_token');
+  const authToken = Cookies.get('auth_token') || Cookies.get('virtue_token') || '';
+  const headers = { Authorization: `Bearer ${authToken}` };
 
-  const secureApi = axios.create({
-    baseURL: API_BASE,
-    headers: {
-      'Authorization': `Bearer ${authToken}`,
-      'x-api-key': API_KEY,
-      'x-user-id': currentUserId
-    }
-  });
-
-  // Anti-Injection Sanitizer
-  const cleanParam = (val: string) => val.replace(/['";\-]/g, "").trim();
-
-  // --- FETCH ANALYTICS ---
-  const fetchIntel = async (period: string) => {
+  const fetchDashboard = async () => {
     setIsLoading(true);
     try {
-      const sanitizedPeriod = cleanParam(period);
-      const res = await secureApi.get(`/analytics/neural-report?range=${sanitizedPeriod}`);
-      setData(res.data);
-    } catch (err) {
-      toast.error("DATA_ACCESS_DENIED", { description: "Encryption handshake failed with analytics node." });
+      const res = await axios.get(`${API_BASE}/api/v1/reports/dashboard`, { headers });
+      setData(res.data.data);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to load reports");
     } finally {
       setIsLoading(false);
     }
   };
 
-  useEffect(() => { fetchIntel(timeframe); }, [timeframe]);
+  useEffect(() => { fetchDashboard(); }, []);
 
-  // --- ACTIONS ---
-  const handleExport = async (format: 'PDF' | 'JSON') => {
-    const tId = toast.loading(`ENCRYPTING_${format}_PAYLOAD...`);
-    try {
-      const response = await secureApi.post('/analytics/export', { 
-        format, 
-        userId: currentUserId,
-        timeframe: cleanParam(timeframe)
-      });
-      
-      // Real download logic
-      window.open(response.data.secureUrl, '_blank');
-      toast.success("INTEL_EXPORT_COMPLETE", { id: tId });
-    } catch (err) {
-      toast.error("EXPORT_FAILED", { id: tId });
-    }
-  };
-
-  if (isLoading || !data) return (
+  if (isLoading) return (
     <div className="h-screen flex flex-col items-center justify-center gap-4">
       <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
-      <p className="text-indigo-500 font-black text-[10px] tracking-[0.5em] uppercase animate-pulse">Synchronizing Neural Metrics...</p>
+      <p className="text-indigo-500 font-black text-[10px] tracking-[0.5em] uppercase">Loading Reports...</p>
     </div>
   );
 
-  return (
-    <div className="space-y-8 max-w-[1600px] mx-auto pb-16 p-4">
-      <Toaster theme="dark" position="top-right" richColors />
-      
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase flex items-center gap-3">
-            <Activity className="text-indigo-500 w-8 h-8" />
-            Neural Analytics
-          </h1>
-          <p className="text-slate-500 text-sm font-bold uppercase tracking-widest mt-1">
-            Metrics Terminal <span className="text-indigo-500/50">|</span> Authorized Op: {currentUserId}
-          </p>
-        </motion.div>
+  if (!data) return (
+    <div className="h-screen flex flex-col items-center justify-center gap-4">
+      <BarChart3 className="w-12 h-12 text-slate-600" />
+      <p className="text-slate-500 font-black text-xs uppercase tracking-widest">No data available</p>
+      <button onClick={fetchDashboard} className="text-indigo-400 text-xs font-bold flex items-center gap-2 hover:text-indigo-300">
+        <RefreshCw size={12} /> Retry
+      </button>
+    </div>
+  );
 
-        <div className="flex flex-wrap gap-3">
-           <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 focus-within:border-indigo-500/50 transition-all">
-              <Calendar size={14} className="text-indigo-400" />
-              <select 
-                value={timeframe}
-                onChange={(e) => setTimeframe(e.target.value)}
-                className="bg-transparent text-[10px] font-black text-white uppercase outline-none cursor-pointer"
-              >
-                 <option value="Last 30 Days" className="bg-slate-950">Last 30 Days</option>
-                 <option value="Last 6 Months" className="bg-slate-950">Last 6 Months</option>
-                 <option value="Year to Date" className="bg-slate-950">Year to Date</option>
-              </select>
-           </div>
-           <button 
-             onClick={() => handleExport('PDF')}
-             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(79,70,229,0.4)]"
-           >
-              <Download size={14} /> Export Intel
-           </button>
+  const { kpis, monthlySales, topProducts, recentInvoices } = data;
+
+  // Compute max for bar chart scaling
+  const maxSales = Math.max(...monthlySales.map(m => m.total), 1);
+
+  const kpiCards = [
+    { icon: TrendingUp,   label: 'Total Sales',       value: fmtPKR(kpis.totalSalesAmount),    sub: `${kpis.totalSalesCount} invoices`,     color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { icon: ShoppingCart, label: 'Total Purchases',   value: fmtPKR(kpis.totalPurchaseAmount), sub: `${kpis.totalPurchaseCount} orders`,     color: 'text-blue-400',    bg: 'bg-blue-500/10' },
+    { icon: PackageCheck, label: 'GRN Received',      value: kpis.totalGRN.toString(),          sub: 'Goods Receipt Notes',                  color: 'text-purple-400',  bg: 'bg-purple-500/10' },
+    { icon: Truck,        label: 'Deliveries',         value: kpis.totalDeliveries.toString(),   sub: 'Delivery notes issued',                color: 'text-amber-400',   bg: 'bg-amber-500/10' },
+    { icon: Boxes,        label: 'Products',           value: kpis.totalProducts.toString(),     sub: 'In catalogue',                         color: 'text-cyan-400',    bg: 'bg-cyan-500/10' },
+    { icon: Activity,     label: 'Stock on Hand',      value: fmt(kpis.totalStockOnHand),        sub: 'Total units across warehouses',         color: 'text-indigo-400',  bg: 'bg-indigo-500/10' },
+    { icon: Clock,        label: 'Pending Orders',     value: kpis.pendingSalesOrders.toString(), sub: 'Awaiting approval',                   color: 'text-rose-400',    bg: 'bg-rose-500/10' },
+  ];
+
+  const statusColor: Record<string, string> = {
+    PAID:      'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    UNPAID:    'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    OVERDUE:   'text-rose-400 bg-rose-500/10 border-rose-500/20',
+    CANCELLED: 'text-slate-500 bg-slate-500/10 border-slate-500/20',
+  };
+
+  return (
+    <div className="max-w-[1600px] mx-auto space-y-8 p-6 pb-16 min-h-screen">
+      <Toaster theme="dark" position="top-right" richColors />
+
+      {/* ── HEADER ─────────────────────────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase flex items-center gap-3">
+            <BarChart3 className="text-indigo-500 w-10 h-10" /> Reports
+          </h1>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1">
+            Business Analytics &amp; Performance Overview
+          </p>
         </div>
+        <button onClick={fetchDashboard}
+          className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all">
+          <RefreshCw size={13} /> Refresh
+        </button>
       </div>
 
-      
-
-      {/* Top Level KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {data.kpis.map((kpi, i) => (
-          <motion.div 
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="bg-white/[0.02] border border-white/[0.08] p-6 rounded-[2rem] relative overflow-hidden group hover:border-indigo-500/30 transition-all"
+      {/* ── KPI CARDS ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-4">
+        {kpiCards.map((k, i) => (
+          <motion.div key={k.label}
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+            className="bg-slate-900/40 border border-white/[0.08] rounded-[2rem] p-5 hover:border-indigo-500/20 transition-all"
           >
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{kpi.label}</p>
-            <div className="flex items-end justify-between mt-2">
-               <h3 className="text-2xl font-black text-white italic tracking-tighter">{kpi.value}</h3>
-               <div className={cn(
-                 "flex items-center text-[10px] font-black px-2 py-0.5 rounded-md",
-                 kpi.up ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
-               )}>
-                 {kpi.up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                 {kpi.trend}
-               </div>
+            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-3", k.bg, k.color)}>
+              <k.icon size={16} />
             </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">{k.label}</p>
+            <p className="text-xl font-black text-white italic tracking-tighter">{k.value}</p>
+            <p className="text-[9px] text-slate-600 font-bold mt-1">{k.sub}</p>
           </motion.div>
         ))}
       </div>
 
-      {/* Main Charts Area */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Sales Trajectory */}
-        <div className="lg:col-span-2 bg-slate-950/40 border border-white/[0.08] p-8 rounded-[2.5rem] backdrop-blur-xl shadow-2xl">
-          <div className="flex justify-between items-start mb-10">
-             <div>
-                <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
-                   <TrendingUp size={16} className="text-indigo-500" /> Sales Trajectory
-                </h3>
-                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">Real-time Node Analysis</p>
-             </div>
-             <div className="flex gap-2">
-                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-indigo-500" /><span className="text-[9px] text-slate-400 font-black uppercase">Actuals</span></div>
-                <div className="flex items-center gap-1.5 ml-3"><span className="w-2 h-2 rounded-full bg-slate-700" /><span className="text-[9px] text-slate-400 font-black uppercase">Forecast</span></div>
-             </div>
+      {/* ── MONTHLY SALES CHART + TOP PRODUCTS ─────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Monthly Sales Bar Chart */}
+        <div className="lg:col-span-2 bg-slate-900/40 border border-white/[0.08] rounded-[2.5rem] p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                <TrendingUp size={14} className="text-indigo-500" /> Monthly Sales
+              </h2>
+              <p className="text-[10px] text-slate-500 font-bold mt-0.5">Last 12 months</p>
+            </div>
           </div>
-          
-          <div className="h-64 w-full flex items-end gap-2 px-2">
-              {data.salesTrajectory.map((h, i) => (
-               <motion.div 
-                 key={i}
-                 initial={{ height: 0 }}
-                 animate={{ height: `${h}%` }}
-                 transition={{ duration: 1, ease: "circOut" }}
-                 className="flex-1 bg-gradient-to-t from-indigo-600/40 to-indigo-400/80 rounded-t-lg relative group"
-               >
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white text-black text-[9px] font-black px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-xl">
-                     {h}k
+
+          {/* Bars */}
+          <div className="flex items-end gap-1.5 h-48">
+            {monthlySales.map((m, i) => {
+              const pct = maxSales > 0 ? (m.total / maxSales) * 100 : 0;
+              return (
+                <div key={m.month} className="flex-1 flex flex-col items-center gap-1 group">
+                  <div className="relative w-full" style={{ height: '100%' }}>
+                    <div className="absolute bottom-0 w-full flex flex-col items-center">
+                      {/* Tooltip */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-white/10 rounded-lg px-2 py-1 text-[8px] font-black text-white whitespace-nowrap z-10 shadow-xl">
+                        {fmtPKR(m.total)}
+                      </div>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max(pct, 2)}%` }}
+                        transition={{ duration: 0.8, delay: i * 0.04, ease: 'circOut' }}
+                        className={cn(
+                          "w-full rounded-t-md",
+                          pct > 0 ? "bg-gradient-to-t from-indigo-700/60 to-indigo-400/90" : "bg-white/5"
+                        )}
+                        style={{ maxHeight: '192px' }}
+                      />
+                    </div>
                   </div>
-               </motion.div>
-              ))}
+                </div>
+              );
+            })}
           </div>
-          <div className="flex justify-between mt-4 px-2">
-              {['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'].map(m => (
-               <span key={m} className="text-[9px] font-black text-slate-600 uppercase font-mono">{m}</span>
-              ))}
+
+          {/* Labels */}
+          <div className="flex gap-1.5 mt-2">
+            {monthlySales.map(m => (
+              <div key={m.month} className="flex-1 text-center">
+                <span className="text-[8px] font-black text-slate-600 uppercase">{m.label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Regional Distribution */}
-        <div className="bg-slate-950/40 border border-white/[0.08] p-8 rounded-[2.5rem] backdrop-blur-xl">
-           <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
-              <Globe size={16} className="text-indigo-500" /> Region Spread
-           </h3>
-           <div className="space-y-6">
-              {data.regionalSpread.map((r) => (
-                <div key={r.region} className="space-y-2">
-                   <div className="flex justify-between text-[10px] font-black uppercase italic">
-                      <span className="text-slate-400">{r.region}</span>
-                      <span className="text-white">{r.val}%</span>
-                   </div>
-                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
+        {/* Top Products */}
+        <div className="bg-slate-900/40 border border-white/[0.08] rounded-[2.5rem] p-8">
+          <h2 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-6">
+            <ArrowUpRight size={14} className="text-emerald-500" /> Top Products
+          </h2>
+
+          {topProducts.length === 0 ? (
+            <div className="h-40 flex items-center justify-center text-slate-600 text-xs font-bold">No sales data yet</div>
+          ) : (
+            <div className="space-y-5">
+              {topProducts.map((p, i) => {
+                const maxRev = topProducts[0].revenue;
+                const pct = maxRev > 0 ? (p.revenue / maxRev) * 100 : 0;
+                return (
+                  <div key={p.product_id}>
+                    <div className="flex justify-between items-baseline mb-1.5">
+                      <span className="text-[10px] font-black text-slate-300 truncate pr-2 max-w-[65%]">{p.name}</span>
+                      <span className="text-[9px] font-black text-emerald-400 shrink-0">{fmtPKR(p.revenue)}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                      <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${r.val}%` }}
-                        className={cn("h-full rounded-full shadow-[0_0_10px_rgba(79,70,229,0.4)]", r.color)}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.9, delay: i * 0.08 }}
+                        className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full"
                       />
-                   </div>
-                </div>
-              ))}
-           </div>
-           
-           <div className="mt-12 p-6 bg-indigo-600/5 border border-indigo-500/10 rounded-3xl relative overflow-hidden group">
-              <div className="flex items-center gap-3 mb-2">
-                 <Target className="text-indigo-500 group-hover:animate-ping" size={18} />
-                 <span className="text-[10px] font-black text-white uppercase">Neural Growth Target</span>
-              </div>
-              <p className="text-[9px] text-slate-500 font-bold uppercase leading-relaxed">
-                Network pacing is <span className="text-emerald-500 underline">Optimized</span>. Predicted reaching Q1 goal 4 days ahead of schedule.
-              </p>
-           </div>
+                    </div>
+                    <p className="text-[8px] text-slate-600 font-bold mt-0.5">{fmt(p.qty)} units sold</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bottom Report Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         {[
-           { icon: PieChart, label: "Inventory Aging Report", color: "text-purple-500", bg: "bg-purple-500/10" },
-           { icon: BarChart3, label: "Distributor Ranking", color: "text-amber-500", bg: "bg-amber-500/10" },
-           { icon: FileJson, label: "System Audit Logs", color: "text-blue-500", bg: "bg-blue-500/10" }
-         ].map((btn, i) => (
-           <motion.div 
-            whileHover={{ scale: 1.02 }}
-            onClick={() => handleExport('JSON')}
-            key={i} 
-            className="bg-white/[0.02] border border-white/[0.05] p-6 rounded-[2rem] flex items-center gap-4 hover:bg-white/[0.04] cursor-pointer transition-all active:scale-95"
-           >
-              <div className={cn("p-3 rounded-2xl", btn.bg, btn.color)}><btn.icon size={20} /></div>
-              <span className="text-[10px] font-black text-white uppercase tracking-widest">{btn.label}</span>
-           </motion.div>
-         ))}
+      {/* ── RECENT INVOICES ─────────────────────────────────────────────── */}
+      <div className="bg-slate-900/40 border border-white/[0.08] rounded-[2.5rem] p-8">
+        <h2 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-6">
+          <FileText size={14} className="text-blue-500" /> Recent Invoices
+        </h2>
+
+        {recentInvoices.length === 0 ? (
+          <div className="h-24 flex items-center justify-center text-slate-600 text-xs font-bold">No invoices yet</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/[0.05]">
+                  {['Invoice #', 'Customer', 'Amount', 'Date', 'Status'].map(h => (
+                    <th key={h} className="text-left text-[9px] font-black text-slate-500 uppercase tracking-widest pb-3 pr-4">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recentInvoices.map((inv, i) => (
+                  <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3 pr-4 text-[10px] font-black text-indigo-400">{inv.number || '—'}</td>
+                    <td className="py-3 pr-4 text-[10px] font-bold text-slate-300">{inv.party}</td>
+                    <td className="py-3 pr-4 text-[10px] font-black text-white">{fmtPKR(inv.amount)}</td>
+                    <td className="py-3 pr-4 text-[10px] font-bold text-slate-500">
+                      {new Date(inv.date).toLocaleDateString('en-GB')}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className={cn(
+                        "text-[8px] font-black px-2.5 py-1 rounded-full uppercase border",
+                        statusColor[inv.status] || 'text-slate-400 bg-slate-500/10 border-slate-500/20'
+                      )}>
+                        {inv.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

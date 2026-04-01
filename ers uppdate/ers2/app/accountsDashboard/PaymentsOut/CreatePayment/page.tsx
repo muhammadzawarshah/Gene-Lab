@@ -25,6 +25,7 @@ export default function CreatePayment() {
   const [paidAmount, setPaidAmount] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [remarks, setRemarks] = useState("");
 
   // --- AUTH & CONFIG ---
   const token = Cookies.get('auth_token');
@@ -99,7 +100,9 @@ export default function CreatePayment() {
         invoiceId: Number(selectedInvoiceId),
         amount: amount,
         method: "CASH",
-        remarks: `Payment by ${currentUserName}`
+        remarks: remarks || `Payment by ${currentUserName}`,
+        narration: remarks || `Supplier payment for Invoice #${selectedInvoiceId}`,
+        userId: currentUserId
       };
 
       await api.post('/api/v1/finance/payments/purchase', payload);
@@ -116,7 +119,7 @@ export default function CreatePayment() {
   };
 
   return (
-    <div className="text-white p-6 md:p-12 pb-32 font-sans bg-black min-h-screen">
+    <div className="text-white p-6 md:p-12 pb-32 font-sans">
       <Toaster position="top-right" theme="dark" richColors />
 
       {/* HEADER SECTION */}
@@ -230,6 +233,16 @@ export default function CreatePayment() {
                         onChange={(e) => setPaidAmount(e.target.value === "" ? "" : Math.abs(Number(e.target.value)))}
                         placeholder="0.00"
                         className="w-full bg-slate-950 border-2 border-white/5 rounded-[2rem] py-6 pl-16 pr-6 text-3xl font-black text-white outline-none focus:border-emerald-500 transition-all"
+                      />
+                    </div>
+                    <div className="pt-4">
+                      <label className="text-[10px] font-black text-emerald-500 uppercase mb-3 block ml-2">Remarks (Optional)</label>
+                      <textarea
+                        rows={2}
+                        className="w-full bg-slate-950 border-2 border-white/5 rounded-[1.5rem] py-4 px-6 text-sm text-white outline-none focus:border-emerald-500 transition-all resize-none shadow-inner"
+                        placeholder="Enter payment remarks..."
+                        value={remarks}
+                        onChange={(e) => setRemarks(e.target.value)}
                       />
                     </div>
                   </div>

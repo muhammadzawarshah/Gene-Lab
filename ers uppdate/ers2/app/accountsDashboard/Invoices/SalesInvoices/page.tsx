@@ -5,15 +5,17 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
-import { 
-  Search, FileText, Printer, Send, 
+import {
+  Search, FileText, Printer, Send, Eye,
   MoreVertical, CheckCircle, Truck,
-  Download, Mail, Trash2, ExternalLink, Loader2, Lock
+  Download, Mail, Trash2, ExternalLink, Loader2, Lock, X
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { CustInvoiceReportComponent } from '@/components/layout/CustInvoiceReportComponent';
 
 // --- Types ---
 interface Invoice {
+  cust_inv_id: number;
   id: string;
   client: string;
   amount: number;
@@ -28,32 +30,39 @@ export default function SalesInvoices() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [isFetchingInvoice, setIsFetchingInvoice] = useState(false);
 
-  // --- Backend Config & Security ---
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const token = Cookies.get('auth_token');
-  const userId = Cookies.get('userId');
+  const userId = Cookies.get('userId') || Cookies.get('user_id');
 
-  // Secure Axios Instance
   const secureApi = axios.create({
     baseURL: API_URL,
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Secure-Auth-ID': userId, // Cross-verification header
+      'X-Secure-Auth-ID': userId,
     }
   });
 
-  // --- FETCH DATA ---
+  // --- FETCH LIST ---
   const fetchInvoices = async () => {
     setIsLoading(true);
     try {
-      if (!token || !userId) throw new Error("Authentication Missing");
-      const response = await secureApi.get(`/sales/invoices?userId=${userId}`);
-      setInvoices(response.data);
+      const response = await secureApi.get(`/api/v1/finance/getinvoice`);
+      const raw: any[] = response.data.data || [];
+      setInvoices(raw.map(inv => ({
+        cust_inv_id:  inv.cust_inv_id,
+        id:           inv.cust_invoice_number || `INV-${inv.cust_inv_id}`,
+        client:       inv.party?.name || 'Unknown',
+        amount:       Number(inv.total_amount || 0),
+        items:        inv.customerinvoiceline?.length ?? 0,
+        deliveryDate: inv.cust_invoice_date ? new Date(inv.cust_invoice_date).toLocaleDateString('en-GB') : '—',
+        status:       inv.status === 'PAID' ? 'Delivered' : inv.status === 'POSTED' ? 'Invoiced' : 'Pending',
+        contact:      inv.party?.phone || '',
+      })));
     } catch (err: any) {
-      toast.error("SECURITY ALERT", { 
-        description: "Could not sync with sales mainframe. Re-authentication might be required." 
-      });
+      toast.error("Failed to load invoices");
     } finally {
       setIsLoading(false);
     }
@@ -61,82 +70,80 @@ export default function SalesInvoices() {
 
   useEffect(() => { fetchInvoices(); }, []);
 
-  // --- SECURITY: SANITIZE SEARCH ---
-  const safeSearch = useMemo(() => {
-    // Stripping potential injection patterns
-    return search.replace(/[${};"']/g, "");
-  }, [search]);
-
-  // --- 1. FUNCTION: PRINT (Sanitized Data) ---
-  const handlePrintInvoice = (inv: Invoice) => {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head><title>Secure Print - ${inv.id}</title></head>
-          <body style="font-family: sans-serif; padding: 50px; background: #fff;">
-            <div style="border: 2px solid #3b82f6; padding: 30px; border-radius: 15px;">
-              <h1 style="color: #1e3a8a;">NEXUS SALES PROTOCOL</h1>
-              <p>Verified By: System Admin (${userId})</p>
-              <hr/>
-              <h3>Invoice: ${inv.id}</h3>
-              <p>Client: ${inv.client}</p>
-              <p>Amount: PKR ${inv.amount.toLocaleString()}</p>
-              <p>Delivery: ${inv.deliveryDate}</p>
-            </div>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-      toast.success("PRINT SUCCESS", { description: "Hardcopy protocol initiated." });
+  // --- VIEW INVOICE (fetch full details) ---
+  const handleViewInvoice = async (inv: Invoice) => {
+    setIsFetchingInvoice(true);
+    setSelectedInvoice(null);
+    try {
+      const res = await secureApi.get(`/api/v1/finance/sales/specific/${inv.cust_inv_id}`);
+      const data = res.data.data || res.data;
+      setSelectedInvoice(data);
+    } catch {
+      toast.error("Could not load invoice details");
+    } finally {
+      setIsFetchingInvoice(false);
     }
   };
 
-  // --- 2. FUNCTION: WHATSAPP (URL Encoded) ---
+  // --- PRINT ---
+  const handlePrint = () => {
+    const printContent = document.getElementById('invoice-print-area');
+    if (printContent) {
+      const originalContent = document.body.innerHTML;
+      document.body.innerHTML = printContent.outerHTML;
+      window.print();
+      window.location.reload();
+    }
+  };
+
+  // --- WHATSAPP ---
   const handleWhatsApp = (inv: Invoice) => {
-    const text = `Verified Invoice from Nexus: ${inv.client}. ID: ${inv.id}, Total: PKR ${inv.amount.toLocaleString()}. Status: ${inv.status}.`;
+    const text = `Invoice from Gene Laboratories: ${inv.client}. ID: ${inv.id}, Total: PKR ${inv.amount.toLocaleString()}. Status: ${inv.status}.`;
     window.open(`https://wa.me/${inv.contact}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // --- 3. FUNCTION: DELETE (Backend Sync) ---
+  // --- DELETE ---
   const handleDelete = async (id: string) => {
-    const toastId = toast.loading("PURGING SALES RECORD...");
+    const toastId = toast.loading("Deleting record...");
     try {
       await secureApi.delete(`/sales/invoices/${id}`, { data: { userId } });
       setInvoices(prev => prev.filter(i => i.id !== id));
-      toast.success("RECORD DELETED", { id: toastId });
+      toast.success("Record deleted", { id: toastId });
       setActiveMenu(null);
-    } catch (err) {
-      toast.error("ACCESS DENIED", { id: toastId, description: "You do not have purge permissions." });
+    } catch {
+      toast.error("Delete failed", { id: toastId });
     }
   };
 
+  // --- EXPORT CSV ---
   const handleExport = () => {
-    const csvData = "Invoice ID,Client,Amount,Items,Date,Status\n" + 
+    const csvData = "Invoice ID,Client,Amount,Items,Date,Status\n" +
       filteredInvoices.map(i => {
-        // Anti-CSV Injection: Prevent formulas starting with = + - @
         const safeClient = i.client.replace(/^[=+\-@]/, "'");
         return `${i.id},${safeClient},${i.amount},${i.items},${i.deliveryDate},${i.status}`;
       }).join("\n");
-    
     const blob = new Blob([csvData], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Secure_Sales_Ledger_${new Date().getTime()}.csv`;
+    link.download = `Sales_Invoices_${new Date().getTime()}.csv`;
     link.click();
-    toast.info("ENCRYPTED EXPORT", { description: "CSV ledger saved to local storage." });
+    toast.info("CSV exported");
   };
 
+  // --- SEARCH FILTER ---
+  const safeSearch = useMemo(() => search.replace(/[${};\"']/g, ""), [search]);
+
   const filteredInvoices = useMemo(() => {
-    return invoices.filter(i => 
-      i.client.toLowerCase().includes(safeSearch.toLowerCase()) || i.id.includes(safeSearch)
+    const term = safeSearch.toLowerCase();
+    return invoices.filter(i =>
+      (i.client?.toLowerCase() ?? '').includes(term) ||
+      (i.id?.toLowerCase() ?? '').includes(term)
     );
   }, [safeSearch, invoices]);
 
   return (
-    <div className=" p-4 md:p-10 text-slate-300 font-sans" onClick={() => setActiveMenu(null)}>
+    <div className="p-4 md:p-10 text-slate-300 font-sans" onClick={() => setActiveMenu(null)}>
       <Toaster position="top-right" theme="dark" richColors />
 
       {/* HEADER */}
@@ -147,11 +154,13 @@ export default function SalesInvoices() {
           </h1>
           <div className="flex items-center gap-2 mt-2">
             <Lock size={12} className="text-blue-500/50" />
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] italic">Encrypted Billing Engine • UID: {userId?.slice(0,8)}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] italic">
+              Billing Engine • UID: {userId?.slice(0,8)}
+            </p>
           </div>
         </motion.div>
-        
-        <button 
+
+        <button
           onClick={(e) => { e.stopPropagation(); handleExport(); }}
           className="flex items-center gap-3 px-8 py-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] hover:bg-blue-500 hover:text-white transition-all text-blue-400 shadow-lg shadow-blue-500/5"
         >
@@ -159,16 +168,13 @@ export default function SalesInvoices() {
         </button>
       </div>
 
-      {/* FILTER BAR */}
+      {/* SEARCH BAR */}
       <div className="bg-[#050b1d] border border-white/5 rounded-[2.5rem] p-4 mb-8 shadow-2xl overflow-hidden relative">
-        <div className="absolute top-0 right-0 p-1 bg-blue-500/20 rounded-bl-xl border-l border-b border-white/10">
-           <p className="text-[7px] font-black text-blue-400 px-2">SAFE MODE ACTIVE</p>
-        </div>
         <div className="relative">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
-          <input 
-            type="text" 
-            placeholder="VALIDATE CLIENT OR INVOICE HASH..."
+          <input
+            type="text"
+            placeholder="Search by client or invoice number..."
             className="w-full bg-[#020617] border border-white/10 rounded-[1.5rem] py-5 pl-16 pr-6 text-[10px] font-black uppercase tracking-widest text-white outline-none focus:border-blue-500/50 transition-all"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -181,7 +187,7 @@ export default function SalesInvoices() {
         {isLoading ? (
           <div className="py-32 flex flex-col items-center gap-4">
             <Loader2 className="animate-spin text-blue-500" size={40} />
-            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">Syncing Secure Ledger...</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">Loading Invoices...</p>
           </div>
         ) : (
           <AnimatePresence mode="popLayout">
@@ -207,8 +213,8 @@ export default function SalesInvoices() {
                       <span className="text-[9px] font-black px-3 py-1 bg-white/5 rounded-lg text-slate-600 border border-white/5">{inv.id}</span>
                     </div>
                     <div className="flex items-center gap-4 text-[10px] font-bold text-slate-500 uppercase italic tracking-wider">
-                      <span className="flex items-center gap-1.5"><Truck size={14} /> Delivered: {inv.deliveryDate}</span>
-                      <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-500"/> {inv.items} Items Verified</span>
+                      <span className="flex items-center gap-1.5"><Truck size={14} /> Date: {inv.deliveryDate}</span>
+                      <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-500"/> {inv.items} Items</span>
                     </div>
                   </div>
                 </div>
@@ -220,19 +226,25 @@ export default function SalesInvoices() {
                   </div>
 
                   <div className="flex items-center gap-3 relative">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handlePrintInvoice(inv); }}
-                      className="p-4 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 hover:text-white transition-all border border-white/5 shadow-xl"
+                    {/* VIEW / PRINT */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleViewInvoice(inv); }}
+                      className="p-4 bg-blue-500/10 text-blue-400 rounded-2xl hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20 shadow-xl"
+                      title="View & Print Invoice"
                     >
-                      <Printer size={20} />
+                      <Eye size={20} />
                     </button>
-                    <button 
+
+                    {/* WHATSAPP */}
+                    <button
                       onClick={(e) => { e.stopPropagation(); handleWhatsApp(inv); }}
                       className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all shadow-lg shadow-emerald-500/10"
                     >
                       <Send size={20} />
                     </button>
-                    <button 
+
+                    {/* MORE */}
+                    <button
                       onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === inv.id ? null : inv.id); }}
                       className="p-4 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 transition-all border border-white/5"
                     >
@@ -248,17 +260,17 @@ export default function SalesInvoices() {
                           className="absolute right-0 top-20 z-[100] w-56 bg-[#0f172a] border border-white/10 rounded-[1.8rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-3 backdrop-blur-xl"
                         >
                           <button className="w-full flex items-center gap-4 px-4 py-4 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-400 hover:text-white transition-all tracking-[0.2em]">
-                            <Mail size={16} className="text-blue-500" /> Dispatch Email
+                            <Mail size={16} className="text-blue-500" /> Send Email
                           </button>
                           <button className="w-full flex items-center gap-4 px-4 py-4 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-400 hover:text-white transition-all tracking-[0.2em]">
                             <ExternalLink size={16} className="text-amber-500" /> Audit Trail
                           </button>
                           <div className="h-[1px] bg-white/5 my-2 mx-2" />
-                          <button 
+                          <button
                             onClick={() => handleDelete(inv.id)}
                             className="w-full flex items-center gap-4 px-4 py-4 hover:bg-rose-500/10 rounded-2xl text-[9px] font-black uppercase text-rose-500 transition-all tracking-[0.2em]"
                           >
-                            <Trash2 size={16} /> Purge Record
+                            <Trash2 size={16} /> Delete Record
                           </button>
                         </motion.div>
                       )}
@@ -276,11 +288,69 @@ export default function SalesInvoices() {
             <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-800 border border-white/5">
               <FileText size={48} />
             </div>
-            <h3 className="text-2xl font-black text-slate-500 uppercase italic tracking-tighter">No Sales Traffic</h3>
-            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.4em] mt-3">Ready for new transaction protocols</p>
+            <h3 className="text-2xl font-black text-slate-500 uppercase italic tracking-tighter">No Invoices Found</h3>
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.4em] mt-3">Ready for new transactions</p>
           </motion.div>
         )}
       </div>
+
+      {/* INVOICE DETAIL MODAL */}
+      {(isFetchingInvoice || selectedInvoice) && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#0f172a] border border-white/10 rounded-[2rem] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-blue-500/5 shrink-0">
+              <div>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Invoice Detail</p>
+                <h2 className="text-xl font-black text-white italic uppercase tracking-tighter">
+                  {selectedInvoice?.cust_invoice_number || (selectedInvoice ? `INV-${selectedInvoice.cust_inv_id}` : 'Loading...')}
+                </h2>
+              </div>
+              <div className="flex items-center gap-3">
+                {selectedInvoice && (
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all"
+                  >
+                    <Printer size={14} /> Print Invoice
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedInvoice(null)}
+                  className="p-2 text-slate-500 hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex-1 overflow-y-auto">
+              {isFetchingInvoice ? (
+                <div className="py-20 flex flex-col items-center gap-4">
+                  <Loader2 className="animate-spin text-blue-500" size={36} />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">Loading Invoice...</p>
+                </div>
+              ) : (
+                <div className="w-full bg-white rounded-lg overflow-hidden flex justify-center p-4">
+                  <CustInvoiceReportComponent data={selectedInvoice} />
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-8 pb-8 shrink-0">
+              <button
+                onClick={() => setSelectedInvoice(null)}
+                className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

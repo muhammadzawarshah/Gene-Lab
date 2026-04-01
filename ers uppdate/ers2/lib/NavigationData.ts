@@ -23,7 +23,7 @@ export interface DropdownItem {
 
 export interface MenuItem {
     id: string;
-    title?: string; 
+    title?: string;
     label?: string;
     icon: LucideIcon;
     type: 'link' | 'dropdown';
@@ -44,6 +44,20 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             type: 'link'
         },
         {
+            id: 'Tax',
+            icon: LayoutDashboard,
+            label: 'Tax',
+            href: '/distributorManager/Tax',
+            type: 'link'
+        },
+        {
+            id: 'Category',
+            icon: LayoutDashboard,
+            label: 'Category',
+            href: '/distributorManager/Category',
+            type: 'link'
+        },
+        {
             id: 'Product',
             title: 'Product',
             icon: ShoppingBag,
@@ -51,6 +65,7 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             items: [
                 { label: 'Create Product', href: '/distributorManager/Products/CreateProduct' },
                 { label: 'Product List', href: '/distributorManager/Products/ProductList' },
+                { label: 'Product Prices', href: '/distributorManager/ProductPrices' },
             ]
         },
         {
@@ -135,7 +150,7 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             type: 'dropdown',
             items: [
                 { label: 'Distributor List', href: '/distributorManager/Distributors/DistributorList' },
-                { label: 'Credit Status', href: '/distributorManager/Distributors/CreditStatus' },
+                // { label: 'Credit Status', href: '/distributorManager/Distributors/CreditStatus' },
             ]
         },
         {
@@ -191,7 +206,7 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             label: 'Payments',
             href: '/distributorDashboard/Payments',
             type: 'link'
-         },
+        },
         // {
         //     id: 'settings',
         //     icon: Settings,
@@ -254,9 +269,11 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             label: 'Accounts / Ledgers',
             type: 'dropdown',
             items: [
-                { label: 'Customer Ledger', href: '/accountsDashboard/Accounts/CustomerLedger' },
-                { label: 'Bank / Cash Ledger', href: '/accountsDashboard/Accounts/Bank' },
-                { label: 'Vendor Ledger', href: '/accountsDashboard/Accounts/VendorLedger' },
+                { label: 'General Ledger',    href: '/accountsDashboard/Accounts/GeneralLedger' },
+                { label: 'Trial Balance',     href: '/accountsDashboard/Accounts/AccountBalance' },
+                { label: 'Customer Ledger',   href: '/accountsDashboard/Accounts/CustomerLedger' },
+                { label: 'Vendor Ledger',     href: '/accountsDashboard/Accounts/VendorLedger' },
+                { label: 'Bank / Cash Ledger',href: '/accountsDashboard/Accounts/Bank' },
             ]
         },
         {
@@ -265,7 +282,8 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             label: 'Bank / Cash',
             type: 'dropdown',
             items: [
-                { label: 'Balances', href: '/accountsDashboard/CashAccounts' },
+                { label: 'Balances',            href: '/accountsDashboard/CashAccounts' },
+                { label: 'Payment Allocations', href: '/accountsDashboard/Accounts/PaymentAllocation' },
             ]
         },
         {

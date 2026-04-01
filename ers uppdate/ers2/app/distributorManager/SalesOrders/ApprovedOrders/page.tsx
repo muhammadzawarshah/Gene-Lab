@@ -4,9 +4,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { Toaster, toast } from 'sonner';
-import { 
+import {
   Edit3, X, Search, Save, User, Eye, Info, Hash, Calendar, DollarSign, Tag, ArrowRightLeft, ShoppingBag, CheckCircle2
 } from 'lucide-react';
+import { InvoiceComponent } from '@/components/layout/InvoiceComponent';
 
 // --- TYPES ---
 interface OrderItem {
@@ -30,23 +31,23 @@ interface Order {
 
 export default function ApprovedOrderManagement() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [products, setProducts] = useState<any[]>([]); 
-  const [categories, setCategories] = useState<any[]>([]); 
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const [editForm, setEditForm] = useState<{
-    so_id: number; 
+    so_id: number;
     so_line_id: number;
     product_id: string;
     product_name: string;
     quantity: number;
     unit_price: number;
     line_total: number;
-    status: string; 
+    status: string;
   } | null>(null);
 
   const token = Cookies.get('auth_token');
@@ -79,14 +80,14 @@ export default function ApprovedOrderManagement() {
   // --- OPEN EDIT MODAL ---
   const openEditModal = (order: Order, item: OrderItem) => {
     setEditForm({
-      so_id: order.so_id, 
+      so_id: order.so_id,
       so_line_id: item.so_line_id,
       product_id: item.product_id,
       product_name: item.product?.name,
       quantity: safeNum(item.quantity),
       unit_price: safeNum(item.unit_price),
       line_total: safeNum(item.line_total),
-      status: order.status 
+      status: order.status
     });
     setIsEditOpen(true);
   };
@@ -95,7 +96,7 @@ export default function ApprovedOrderManagement() {
   const handleEditSave = async () => {
     if (!editForm || !token) return;
     const toastId = toast.loading("Updating Approved Order...");
-    
+
     try {
       const payload = {
         so_id: editForm.so_id,
@@ -104,16 +105,16 @@ export default function ApprovedOrderManagement() {
         quantity: editForm.quantity,
         unit_price: editForm.unit_price,
         line_total: editForm.line_total,
-        status: editForm.status 
+        status: editForm.status
       };
 
-      await axios.put(`${API_BASE}/api/v1/distribution/sales/${editForm.so_id}`, payload, { 
-        headers: { Authorization: `Bearer ${token}` } 
+      await axios.put(`${API_BASE}/api/v1/distribution/sales/${editForm.so_id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       toast.success("Order Synced Successfully", { id: toastId });
       setIsEditOpen(false);
-      fetchData(); 
+      fetchData();
     } catch (err) {
       toast.error("Failed to update status.", { id: toastId });
     }
@@ -121,9 +122,9 @@ export default function ApprovedOrderManagement() {
 
   // --- FILTER: ONLY APPROVED ITEMS ---
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => (o.status === 'APPROVED') && 
-      (o.party?.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-       o.salesorderline.some(i => i.product?.name?.toLowerCase().includes(searchQuery.toLowerCase())))
+    return orders.filter(o => (o.status === 'APPROVED') &&
+      (o.party?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.salesorderline.some(i => i.product?.name?.toLowerCase().includes(searchQuery.toLowerCase())))
     );
   }, [orders, searchQuery]);
 
@@ -145,8 +146,8 @@ export default function ApprovedOrderManagement() {
         </div>
         <div className="relative w-full md:w-96">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-          <input 
-            placeholder="Search approved records..." 
+          <input
+            placeholder="Search approved records..."
             className="w-full bg-slate-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm outline-none focus:border-emerald-500 transition-all shadow-inner backdrop-blur-md"
             value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -162,7 +163,7 @@ export default function ApprovedOrderManagement() {
                 <th className="p-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/10">Ref#</th>
                 <th className={thStyle}>Customer</th>
                 <th className={thStyle}>Product</th>
-                <th className={thStyle}>Status</th> 
+                <th className={thStyle}>Status</th>
                 <th className={thStyle + " text-center"}>Qty</th>
                 <th className={thStyle + " text-right"}>Rate</th>
                 <th className={thStyle + " text-right"}>Total Amount</th>
@@ -187,7 +188,7 @@ export default function ApprovedOrderManagement() {
                   </td>
                   <td className={tdStyle}>
                     <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase">
-                        <CheckCircle2 size={10} /> {order.status}
+                      <CheckCircle2 size={10} /> {order.status}
                     </span>
                   </td>
                   <td className={tdStyle + " text-center font-bold"}>{item.quantity}</td>
@@ -195,8 +196,8 @@ export default function ApprovedOrderManagement() {
                   <td className={tdStyle + " text-right font-black text-emerald-400 italic"}>PKR {safeNum(item.line_total).toLocaleString()}</td>
                   <td className="p-4 text-center">
                     <div className="flex justify-center gap-3">
-                      <button onClick={() => openEditModal(order, item)} className="p-2.5 bg-white/5 hover:bg-emerald-600 text-slate-400 hover:text-white rounded-xl transition-all active:scale-90 border border-white/5"><Edit3 size={15}/></button>
-                      <button onClick={() => { setSelectedOrder(order); setIsViewOpen(true); }} className="p-2.5 bg-white/5 hover:bg-emerald-500 text-slate-400 hover:text-black rounded-xl transition-all active:scale-90 border border-white/5"><Eye size={15}/></button>
+                      <button onClick={() => openEditModal(order, item)} className="p-2.5 bg-white/5 hover:bg-emerald-600 text-slate-400 hover:text-white rounded-xl transition-all active:scale-90 border border-white/5"><Edit3 size={15} /></button>
+                      <button onClick={() => { setSelectedOrder(order); setIsViewOpen(true); }} className="p-2.5 bg-white/5 hover:bg-emerald-500 text-slate-400 hover:text-black rounded-xl transition-all active:scale-90 border border-white/5"><Eye size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -212,47 +213,47 @@ export default function ApprovedOrderManagement() {
           <div className="bg-[#0f172a] border border-white/10 w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden shadow-emerald-500/5">
             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
               <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-500/20">
-                    <ArrowRightLeft className="text-emerald-500" size={20} />
-                 </div>
-                 <h3 className="text-xl font-black italic uppercase">Manage <span className="text-emerald-500">Approved Line</span></h3>
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-500/20">
+                  <ArrowRightLeft className="text-emerald-500" size={20} />
+                </div>
+                <h3 className="text-xl font-black italic uppercase">Manage <span className="text-emerald-500">Approved Line</span></h3>
               </div>
-              <button onClick={() => setIsEditOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-slate-500 hover:text-white transition-all"><X size={20}/></button>
+              <button onClick={() => setIsEditOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-slate-500 hover:text-white transition-all"><X size={20} /></button>
             </div>
-            
+
             <div className="p-10 space-y-8">
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Current Status</label>
-                    <select 
-                        className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-emerald-500 font-bold text-xs uppercase cursor-pointer"
-                        value={editForm.status}
-                        onChange={(e) => setEditForm({...editForm, status: e.target.value})}
-                    >
-                        <option value="APPROVED">APPROVED</option>
-                        <option value="DRAFT">DRAFT</option>
-                        <option value="PENDING">PENDING</option>
-                        <option value="CANCELLED">CANCELLED</option>
-                        {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
-                    </select>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Current Status</label>
+                  <select
+                    className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-emerald-500 font-bold text-xs uppercase cursor-pointer"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  >
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="DRAFT">DRAFT</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="CANCELLED">CANCELLED</option>
+                    {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Quantity</label>
-                    <input type="number" className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-emerald-500 font-mono text-lg"
-                    value={editForm.quantity} onChange={(e) => { const q = safeNum(e.target.value); setEditForm({...editForm, quantity: q, line_total: q * editForm.unit_price}); }} />
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Quantity</label>
+                  <input type="number" className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-emerald-500 font-mono text-lg"
+                    value={editForm.quantity} onChange={(e) => { const q = safeNum(e.target.value); setEditForm({ ...editForm, quantity: q, line_total: q * editForm.unit_price }); }} />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Unit Rate</label>
-                    <input type="number" className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-emerald-500 font-mono text-lg"
-                    value={editForm.unit_price} onChange={(e) => { const r = safeNum(e.target.value); setEditForm({...editForm, unit_price: r, line_total: editForm.quantity * r}); }} />
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Unit Rate</label>
+                  <input type="number" className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-emerald-500 font-mono text-lg"
+                    value={editForm.unit_price} onChange={(e) => { const r = safeNum(e.target.value); setEditForm({ ...editForm, unit_price: r, line_total: editForm.quantity * r }); }} />
                 </div>
               </div>
 
               <div className="p-8 bg-gradient-to-r from-emerald-500/10 to-transparent rounded-[2rem] border border-emerald-500/20 flex justify-between items-center">
-                <span className="text-[11px] font-black text-emerald-500 uppercase flex items-center gap-2"><DollarSign size={14}/> Final Value</span>
+                <span className="text-[11px] font-black text-emerald-500 uppercase flex items-center gap-2"><DollarSign size={14} /> Final Value</span>
                 <span className="font-mono font-bold text-3xl text-white italic">PKR {safeNum(editForm.line_total).toLocaleString()}</span>
               </div>
             </div>
@@ -260,7 +261,7 @@ export default function ApprovedOrderManagement() {
             <div className="p-8 border-t border-white/5 flex gap-4 bg-white/[0.01]">
               <button onClick={() => setIsEditOpen(false)} className="flex-1 py-5 text-[10px] font-black uppercase text-slate-500 hover:text-white transition-all">Discard</button>
               <button onClick={handleEditSave} className="flex-[2] py-5 bg-emerald-500 hover:bg-emerald-600 rounded-2xl text-black text-[10px] font-black uppercase flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-emerald-500/20">
-                <Save size={18}/> Update Approved Order
+                <Save size={18} /> Update Approved Order
               </button>
             </div>
           </div>
@@ -269,30 +270,36 @@ export default function ApprovedOrderManagement() {
 
       {/* VIEW MODAL */}
       {isViewOpen && selectedOrder && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
-          <div className="bg-[#0f172a] border border-white/10 w-full max-w-2xl rounded-[3.5rem] shadow-2xl overflow-hidden border-t-emerald-500 border-t-2">
-            <div className="p-8 border-b border-white/5 flex justify-between items-center">
-               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center font-black italic text-emerald-500"><Eye size={20}/></div>
-                <h3 className="text-2xl font-black italic uppercase italic tracking-tighter">Approved <span className="text-emerald-500">Log</span></h3>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl relative">
+
+            {/* Modal Toolbar (Sticky) */}
+            <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
+              <h3 className="text-white font-black italic uppercase ml-4">Invoice Preview</h3>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => window.print()}
+                  className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
+                >
+                  Print PDF
+                </button>
+                <button
+                  onClick={() => setIsViewOpen(false)}
+                  className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <button onClick={() => setIsViewOpen(false)} className="text-slate-500 hover:text-white transition-all"><X size={24}/></button>
             </div>
-            <div className="p-10 grid grid-cols-2 gap-10">
-                <DetailItem label="Order Reference" value={`#SO-${selectedOrder.so_id}`} icon={<Hash size={14} className="text-emerald-500"/>} />
-                <DetailItem label="Client Name" value={selectedOrder.party.name} icon={<User size={14} className="text-emerald-500"/>} />
-                <DetailItem label="Workflow Status" value={selectedOrder.status} icon={<Tag size={14} className="text-emerald-500"/>} />
-                <DetailItem label="Creation Date" value={new Date(selectedOrder.order_date).toLocaleDateString()} icon={<Calendar size={14} className="text-emerald-500"/>} />
-                <div className="col-span-2 p-6 bg-white/[0.02] rounded-3xl border border-white/5">
-                   <div className="flex justify-between items-center">
-                      <span className="text-xs font-black uppercase text-slate-500 tracking-widest">Total Verified Amount</span>
-                      <span className="text-2xl font-black text-emerald-400 font-mono italic">PKR {safeNum(selectedOrder.total_amount).toLocaleString()}</span>
-                   </div>
-                </div>
+
+            {/* Invoice Content Area */}
+            <div className="p-6 bg-gray-100 rounded-b-[2rem]">
+              <div id="printable-area">
+                {/* YAHAN HUM COMPONENT CALL KAR RAHE HAIN */}
+                <InvoiceComponent order={selectedOrder} />
+              </div>
             </div>
-            <div className="p-8 border-t border-white/5 bg-white/[0.01] flex justify-center">
-              <button onClick={() => setIsViewOpen(false)} className="px-12 py-4 bg-slate-900 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:border-emerald-500 transition-all">Close Review</button>
-            </div>
+
           </div>
         </div>
       )}
@@ -301,12 +308,12 @@ export default function ApprovedOrderManagement() {
 }
 
 function DetailItem({ label, value, icon }: { label: string, value: string, icon: React.ReactNode }) {
-    return (
-        <div className="space-y-2 group">
-            <div className="flex items-center gap-2 text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                {icon} {label}
-            </div>
-            <div className="text-sm font-bold text-white border-l-2 border-white/5 pl-4 py-1 group-hover:border-emerald-500 transition-all">{value || "N/A"}</div>
-        </div>
-    )
+  return (
+    <div className="space-y-2 group">
+      <div className="flex items-center gap-2 text-[10px] font-black text-slate-600 uppercase tracking-widest">
+        {icon} {label}
+      </div>
+      <div className="text-sm font-bold text-white border-l-2 border-white/5 pl-4 py-1 group-hover:border-emerald-500 transition-all">{value || "N/A"}</div>
+    </div>
+  )
 }

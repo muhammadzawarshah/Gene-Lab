@@ -15,11 +15,12 @@ import { cn } from "@/lib/utils";
 // --- Types ---
 interface VendorEntry {
   id: string;
+  invoice_ref: string | null;
   date: string;
   type: 'Purchase' | 'Payment' | 'Return';
   description: string;
-  debit: number; 
-  credit: number; 
+  debit: number;
+  credit: number;
   balance: number;
 }
 
@@ -42,7 +43,7 @@ export default function VendorLedger() {
   // --- Security & Auth Config ---
   const API_KEY = process.env.NEXT_PUBLIC_API_KEY; // Managed via Axios Headers
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const currentUserId = Cookies.get('userId');
+  const currentUserId = Cookies.get('userId') || Cookies.get('user_id');
   const token = Cookies.get('auth_token');
 
   // Secure Axios Instance
@@ -61,7 +62,7 @@ export default function VendorLedger() {
       setIsLoading(true);
       try {
         if (!currentUserId || !token) throw new Error("AUTH_INVALID");
-        const response = await secureApi.get(`/vendors/summary?ownerId=${currentUserId}`);
+        const response = await secureApi.get(`/api/v1/finance/parties/summary/SUPPLIER`);
         setVendors(response.data);
       } catch (err) {
         toast.error("SECURITY ALERT", { 
@@ -81,7 +82,7 @@ export default function VendorLedger() {
         try {
           // Security: Regex to ensure ID is strictly alphanumeric (Prevents SQL Injection)
           const safeId = selectedVendor.id.replace(/[^a-zA-Z0-9-]/g, "");
-          const response = await secureApi.get(`/vendors/ledger/${safeId}?userId=${currentUserId}`);
+          const response = await secureApi.get(`/api/v1/finance/parties/ledger/${safeId}`);
           setLedgerData(prev => ({ ...prev, [selectedVendor.id]: response.data }));
         } catch (err) {
           toast.error("DATA LOCK", { description: "Failed to retrieve encrypted ledger." });
@@ -245,6 +246,8 @@ export default function VendorLedger() {
                   <table className="w-full text-left">
                     <thead className="sticky top-0 bg-[#050b1d] z-10">
                       <tr className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] border-b border-white/5">
+                        <th className="px-4 py-6 w-12">S.No</th>
+                        <th className="px-4 py-6">Invoice No</th>
                         <th className="px-8 py-6">Timestamp</th>
                         <th className="px-8 py-6">Transaction Detail</th>
                         <th className="px-8 py-6 text-emerald-500">Paid (-)</th>
@@ -255,18 +258,23 @@ export default function VendorLedger() {
                     <tbody className="divide-y divide-white/5">
                       {!ledgerData[selectedVendor.id] ? (
                         <tr>
-                          <td colSpan={5} className="py-24 text-center">
+                          <td colSpan={7} className="py-24 text-center">
                             <Loader2 className="animate-spin mx-auto text-amber-500 mb-4" size={32} />
                             <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">Verifying Blockchain Hashes...</p>
                           </td>
                         </tr>
                       ) : (
-                        ledgerData[selectedVendor.id].map((entry) => (
+                        ledgerData[selectedVendor.id].map((entry, idx) => (
                           <tr key={entry.id} className="hover:bg-white/[0.03] transition-colors group">
+                            <td className="px-4 py-8 text-[11px] font-black text-slate-600 text-center">{idx + 1}</td>
+                            <td className="px-4 py-8">
+                              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">
+                                {entry.id || '—'}
+                              </span>
+                            </td>
                             <td className="px-8 py-8 text-[11px] font-black text-slate-500 uppercase italic">{entry.date}</td>
                             <td className="px-8 py-8">
                               <p className="text-xs font-black text-slate-200 uppercase tracking-tight group-hover:text-amber-500 transition-colors">{entry.description}</p>
-                              <p className="text-[9px] font-bold text-slate-700 uppercase mt-1">Audit-ID: {entry.id}</p>
                             </td>
                             <td className="px-8 py-8 text-xs font-black text-emerald-500 italic">
                               {entry.debit > 0 ? `PKR ${entry.debit.toLocaleString()}` : '—'}

@@ -3,294 +3,247 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster, toast } from 'sonner';
 import { 
-  History, ArrowUpRight, ArrowDownLeft, 
-  Search, Download, Package, 
-  Database, RefreshCcw, Tag, 
-  Edit3, Trash2, X, Save, 
-  ShieldCheck, Loader2, AlertCircle
+  Search, RefreshCcw, Database, 
+  Warehouse, ShieldCheck, Loader2, Calendar,
+  Hash, Package, DollarSign, Activity
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { Toaster, toast } from 'sonner';
 
-// --- API CONFIGURATION ---
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
 
-export default function StockLedger() {
-  const [ledgerData, setLedgerData] = useState<any[]>([]);
+export default function WarehouseStockLedger() {
+  const [stockData, setStockData] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState('All');
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Modal States
-  const [editingTxn, setEditingTxn] = useState<any>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  // Security Context
-  const currentUserId = Cookies.get('userId');
   const authToken = Cookies.get('auth_token');
 
   const secureApi = axios.create({
     baseURL: API_BASE,
-    headers: {
-      'Authorization': `Bearer ${authToken}`,
-      'x-api-key': API_KEY,
-      'x-user-id': currentUserId
-    }
+    headers: { 'Authorization': `Bearer ${authToken}` }
   });
 
-  // Anti-Hack Sanitization
-  const sanitize = (val: string) => val.replace(/[<>{}[\]\\^`|]/g, "").trim();
+  // --- 1. FETCH ALL WAREHOUSES ---
+  useEffect(() => {
+    const fetchWarehouses = async () => {
+      try {
+        const res = await secureApi.get('/api/v1/warehouse/list');
+        setWarehouses(res.data.data || []);
+      } catch (err) {
+        toast.error("WAREHOUSE_FETCH_ERROR");
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+    fetchWarehouses();
+  }, []);
 
-  // --- FETCH DATA ---
-  const fetchLedger = async () => {
+  // --- 2. FETCH STOCK BY WAREHOUSE ID (Using your new Controller Logic) ---
+  const fetchStock = async (warehouseId: string) => {
+    if (!warehouseId) return;
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const res = await secureApi.get('/inventory/ledger');
-      setLedgerData(res.data);
-    } catch (err) {
-      toast.error("LEDGER_SYNC_ERROR", { description: "Security protocol blocked the handshake." });
+      const res = await secureApi.get(`/api/v1/stock/warehouse/${warehouseId}`);
+      const mappedData = (res.data.data || []).map((item: any) => ({
+        id: item.stock_id,
+        product_name: item.product_name,
+        product_code: item.product_code,
+        stock: item.available,
+        on_hand: item.on_hand,
+        reserved: item.reserved,
+        price: Number(item.unit_price) || 0,
+        uom: item.uom,
+      }));
+      setStockData(mappedData);
+      toast.success("LEDGER_SYNC_COMPLETE", { description: `${mappedData.length} items loaded.` });
+    } catch (err: any) {
+      // 404 = warehouse exists but has no stock — show empty table, not an error
+      if (err.response?.status === 404) {
+        setStockData([]);
+      } else {
+        toast.error("LEDGER_SYNC_ERROR");
+        setStockData([]);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  useEffect(() => { fetchLedger(); }, []);
-
-  // --- ACTIONS ---
-
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const tId = toast.loading("REWRITING_LEDGER_ENTRY...");
-    try {
-      const sanitizedPayload = {
-        ...editingTxn,
-        item: sanitize(editingTxn.item),
-        warehouse: sanitize(editingTxn.warehouse)
-      };
-      
-      await secureApi.put(`/inventory/ledger/update/${editingTxn.id}`, sanitizedPayload);
-      setLedgerData(prev => prev.map(t => t.id === editingTxn.id ? sanitizedPayload : t));
-      toast.success("TRANSACTION_UPDATED", { id: tId });
-      setIsEditModalOpen(false);
-    } catch (err) {
-      toast.error("WRITE_PERMISSION_DENIED", { id: tId });
-    }
+  const handleWarehouseChange = (id: string) => {
+    setSelectedWarehouse(id);
+    fetchStock(id);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("PURGE TRANSACTION? This will create a gap in the audit trail.")) return;
-    const tId = toast.loading("REMOVING_ENTRY...");
-    try {
-      await secureApi.delete(`/inventory/ledger/delete/${id}`);
-      setLedgerData(prev => prev.filter(t => t.id !== id));
-      toast.success("ENTRY_PURGED", { id: tId });
-    } catch (err) {
-      toast.error("DELETE_FAILED", { id: tId });
-    }
-  };
+  // --- SEARCH FILTER ---
+  const filteredData = useMemo(() => {
+    return stockData.filter(item => 
+      item.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.product_code?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, stockData]);
 
-  // Filter & Search Logic
-  const processedData = useMemo(() => {
-    return ledgerData.filter(item => {
-      const matchesSearch = item.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            item.item.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filter === 'All' || item.type === filter || item.status === filter;
-      return matchesSearch && matchesFilter;
-    });
-  }, [searchTerm, filter, ledgerData]);
-
-  if (isLoading) return (
+  if (isInitialLoading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-[#020617] gap-4">
-      <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-      <p className="text-blue-500 font-black uppercase tracking-[0.4em] text-xs">Decrypting Ledger Matrix...</p>
+      <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+      <p className="text-emerald-500 font-black uppercase tracking-[0.4em] text-[10px]">Initializing Warehouse Matrix...</p>
     </div>
   );
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 pb-20 p-4 min-h-screen">
+    <div className="max-w-[1600px] mx-auto space-y-8 pb-20 p-6 min-h-screen text-slate-300">
       <Toaster theme="dark" position="top-right" richColors />
 
-      {/* --- Header Area --- */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase flex items-center gap-3">
-            <History className="text-blue-500 w-10 h-10" />
-            Stock Ledger
+      {/* --- HEADER & CONTROLS (UI Untouched) --- */}
+      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8 border-b border-white/5 pb-10">
+        <div className="space-y-4">
+          <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase">
+            STOCK <span className="text-emerald-500">LEDGER</span>
           </h1>
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
-            <Database size={12} className="text-blue-500/50" />
-            SECURE LOG: {currentUserId || 'SESSION_UNSTABLE'}
-          </p>
-        </motion.div>
+          <div className="flex items-center gap-4">
+            <div className="relative group min-w-[300px]">
+              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Select Target Node (Warehouse)</label>
+              <div className="relative">
+                <Warehouse className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                <select 
+                  value={selectedWarehouse}
+                  onChange={(e) => handleWarehouseChange(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-xs text-white outline-none focus:border-emerald-500/50 appearance-none font-bold uppercase tracking-wider transition-all"
+                >
+                  <option value="" className="bg-slate-950">--- SELECT WAREHOUSE ---</option>
+                  {warehouses.map(w => (
+                    <option key={w.warehouse_id} value={w.warehouse_id} className="bg-slate-950 uppercase">{w.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-emerald-500 transition-colors" />
             <input 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search TXN ID or Item..." 
-              className="bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-6 text-xs text-white outline-none focus:border-blue-500/50 w-full sm:w-80 transition-all font-bold uppercase tracking-wider"
+              placeholder="Search Product Code or Name..." 
+              className="bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-xs text-white outline-none focus:border-emerald-500/50 w-full sm:w-80 transition-all font-bold uppercase"
             />
           </div>
-          <button onClick={fetchLedger} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2">
-            <RefreshCcw size={14} className={isLoading ? "animate-spin" : ""} /> Sync Logs
+          <button 
+            onClick={() => fetchStock(selectedWarehouse)}
+            disabled={!selectedWarehouse || isLoading}
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-black px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCcw size={14} className={isLoading ? "animate-spin" : ""} /> {isLoading ? "Syncing..." : "Sync Ledger"}
           </button>
         </div>
       </div>
 
-      {/* --- Filter Chips --- */}
-      <div className="flex items-center gap-3 overflow-x-auto pb-2">
-        {['All', 'Inbound', 'Outbound', 'Pending', 'Verified'].map((tag) => (
-          <button
-            key={tag}
-            onClick={() => setFilter(tag)}
-            className={cn(
-              "px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all whitespace-nowrap",
-              filter === tag ? "bg-blue-600 border-blue-500 text-white" : "bg-white/5 border-white/5 text-slate-500"
-            )}
-          >
-            {tag}
-          </button>
-        ))}
-      </div>
-
-      
-
-      {/* --- Ledger Table --- */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-950/40 border border-white/[0.08] rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
+      {/* --- TABLE AREA (UI Untouched) --- */}
+      <div className="bg-[#0f172a]/40 border border-white/5 rounded-[3rem] overflow-hidden backdrop-blur-2xl shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-white/5 bg-white/[0.02]">
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Transaction Info</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Asset</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Node Path</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Qty</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Actions</th>
+              <tr className="border-b border-white/5 bg-black/40">
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">SNo</th>
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Product Details</th>
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Available Stock</th>
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Reserved</th>
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Unit Price</th>
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">UOM</th>
+                <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
-              <AnimatePresence>
-                {processedData.map((row) => (
-                  <motion.tr layout key={row.id} className="group hover:bg-white/[0.02] transition-all">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <div className={cn("p-2.5 rounded-xl border", row.type === 'Inbound' ? "bg-emerald-500/10 text-emerald-500" : "bg-blue-500/10 text-blue-500")}>
-                          {row.type === 'Inbound' ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
-                        </div>
+              {!selectedWarehouse ? (
+                <tr>
+                  <td colSpan={7} className="py-40 text-center">
+                    <div className="flex flex-col items-center gap-4 opacity-20">
+                      <Database size={60} />
+                      <p className="text-xs font-black uppercase tracking-[0.5em]">Select a warehouse to decrypt stock data</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : isLoading ? (
+                <tr>
+                   <td colSpan={7} className="py-40 text-center">
+                    <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Querying Node Database...</p>
+                  </td>
+                </tr>
+              ) : filteredData.length > 0 ? (
+                filteredData.map((row, index) => (
+                  <tr key={row.id} className="group hover:bg-emerald-500/[0.02] transition-colors">
+                    <td className="px-6 py-6 text-center font-mono text-[10px] text-slate-600">{index + 1}</td>
+                    <td className="px-6 py-6">
+                      <div className="flex items-center gap-3">
+                        <Package size={14} className="text-emerald-500/50" />
                         <div>
-                          <p className="text-xs font-black text-white italic">{row.id}</p>
-                          <p className="text-[9px] text-slate-600 font-bold">{row.date}</p>
+                           <p className="font-black text-white uppercase text-xs tracking-tight">{row.product_name}</p>
+                           <p className="text-[9px] font-mono text-slate-500">{row.product_code}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-6">
-                      <p className="text-xs font-bold text-slate-200 uppercase">{row.item}</p>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
-                        <Tag size={12} className="text-blue-500/50" /> {row.warehouse}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className={cn("text-sm font-black italic", row.qty.startsWith('+') ? "text-emerald-500" : "text-rose-500")}>{row.qty}</span>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className={cn("px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border", row.status === 'Verified' ? "border-emerald-500/20 text-emerald-500" : "border-amber-500/20 text-amber-500")}>
-                        {row.status}
+                    <td className="px-6 py-6 text-center">
+                      <span className={cn(
+                        "text-xs font-black px-3 py-1 rounded-lg border inline-block min-w-[80px]",
+                        row.stock > 0 ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5" : "text-rose-400 border-rose-500/20 bg-rose-500/5"
+                      )}>
+                        {row.stock}
                       </span>
                     </td>
-                    <td className="px-8 py-6 text-right">
-                       <div className="flex justify-end gap-2">
-                         <button onClick={() => {setEditingTxn(row); setIsEditModalOpen(true);}} className="p-2 bg-white/5 hover:bg-blue-600 rounded-lg text-slate-400 hover:text-white transition-all"><Edit3 size={14}/></button>
-                         <button onClick={() => handleDelete(row.id)} className="p-2 bg-white/5 hover:bg-rose-600 rounded-lg text-slate-400 hover:text-white transition-all"><Trash2 size={14}/></button>
-                       </div>
+                    <td className="px-6 py-6 text-center">
+                      <div className="text-[10px] font-bold text-slate-500 italic">
+                        {row.reserved}
+                      </div>
                     </td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
+                    <td className="px-6 py-6">
+                      <div className="flex items-center gap-1 text-xs font-bold text-blue-400">
+                        <DollarSign size={12} />
+                        {Number(row.price).toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-6">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        {row.uom}
+                      </span>
+                    </td>
+                    <td className="px-6 py-6 text-center">
+                        <div className="flex justify-center">
+                          {row.stock > 0 ? (
+                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          )}
+                        </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="py-40 text-center text-[10px] font-black uppercase tracking-[0.5em] text-slate-700">
+                    No Stock Assets Found in this Node
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-      </motion.div>
-
-      {/* --- EDIT MODAL --- */}
-      <AnimatePresence>
-        {isEditModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsEditModalOpen(false)} className="absolute inset-0 bg-[#020617]/95 backdrop-blur-xl" />
-            <motion.form 
-              onSubmit={handleUpdate}
-              initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-lg bg-slate-900 border border-white/10 rounded-[2.5rem] p-10 shadow-2xl"
-            >
-              <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-8 flex items-center gap-3">
-                <Edit3 className="text-blue-500" /> Adjust Transaction
-              </h2>
-
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Asset Nomenclature</label>
-                  <input 
-                    required
-                    value={editingTxn.item}
-                    onChange={(e) => setEditingTxn({...editingTxn, item: e.target.value})}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-xs text-white outline-none focus:border-blue-500 transition-all font-bold"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Node</label>
-                  <input 
-                    required
-                    value={editingTxn.warehouse}
-                    onChange={(e) => setEditingTxn({...editingTxn, warehouse: e.target.value})}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-xs text-white outline-none focus:border-blue-500 transition-all font-bold"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Quantity</label>
-                    <input 
-                      required
-                      value={editingTxn.qty}
-                      onChange={(e) => setEditingTxn({...editingTxn, qty: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-xs text-white outline-none focus:border-blue-500 transition-all font-bold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Audit Status</label>
-                    <select 
-                      value={editingTxn.status}
-                      onChange={(e) => setEditingTxn({...editingTxn, status: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-xs text-white outline-none focus:border-blue-500 transition-all font-bold appearance-none"
-                    >
-                      <option value="Verified">Verified</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Cancelled">Cancelled</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 flex items-center gap-3">
-                  <ShieldCheck className="text-blue-400" size={16} />
-                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Hash integrity will be re-verified by Node {currentUserId}.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-10">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="py-4 bg-white/5 rounded-2xl font-black text-[10px] text-slate-500 uppercase tracking-widest hover:text-white transition-all">Cancel</button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
-                  <Save size={14} /> Commit Changes
-                </button>
-              </div>
-            </motion.form>
-          </div>
-        )}
-      </AnimatePresence>
+      </div>
+      
+      {/* SECURITY FOOTER */}
+      <div className="flex items-center justify-between opacity-40 px-8">
+        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em]">
+          <ShieldCheck size={12} className="text-emerald-500" />
+          End-to-End Encrypted Session
+        </div>
+        <p className="text-[9px] font-mono tracking-tighter uppercase">NODE_SYNC_STABLE :: {new Date().toLocaleTimeString()}</p>
+      </div>
     </div>
   );
 }

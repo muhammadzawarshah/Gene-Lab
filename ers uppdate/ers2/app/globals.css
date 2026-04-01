@@ -90,3 +90,31 @@ html {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
+
+/* ── Global Select / Option Dark Theme Fix ──────────────────────────────────
+   Browser renders native <select> dropdown popup outside normal CSS cascade.
+   Setting background-color + color on <option> is the ONLY reliable way
+   to prevent the white-background / black-hover issue in dark-themed apps.
+   ─────────────────────────────────────────────────────────────────────────── */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+select option:hover,
+select option:focus,
+select option:checked,
+select option:active {
+  background-color: #1e3a5f;
+  color: #ffffff;
+}
+
+/* Ensure disabled options are readable */
+select option:disabled {
+  color: #475569;
+  background-color: #0f172a;
+}

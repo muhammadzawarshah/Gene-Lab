@@ -4,37 +4,29 @@ import React, { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { Toaster, toast } from 'sonner';
-import { 
-  Trash2, Layers, ChevronDown, Loader2, 
-  Calculator, Percent, ReceiptIndianRupee, 
+import {
+  Trash2, Layers, ChevronDown, Loader2,
+  Calculator, ReceiptIndianRupee,
   Wallet, ShieldCheck, UserCircle2
 } from 'lucide-react';
 
 // --- TYPES ---
-interface Customer {
-  party_id: string; 
-  name: string;
-}
-
-interface Category { 
-  product_category_id: string; 
-  category: string; 
-}
-
-interface Batch {
+interface Customer  { party_id: string; name: string; }
+interface Category  { product_category_id: string; category: string; }
+interface Product   { product_id: string; name: string; }
+interface TaxItem   { tax_id: number; name: string; rate: number; type: string; context: string; }
+interface BatchItem {
+  batch_id: number;
   batch_number: string;
-  expiry_date: string;
+  expiry_date: string | null;
+  manufacturing_date: string | null;
+  batchitem: { product_id: string; available_quantity: number }[];
 }
-
-interface Product { 
-  product_id: string; 
-  name: string; 
-  batch?: Batch[]; 
-}
-
 interface SalesItem {
   category_id: string;
   product_id: string;
+  price_type: string;
+  batch_id: number | null;
   batch_no: string;
   expiry: string;
   total_unit: number;
@@ -42,57 +34,50 @@ interface SalesItem {
   amount: number;
 }
 
+const emptyRow = (): SalesItem => ({
+  category_id: '', product_id: '', price_type: '',
+  batch_id: null, batch_no: '', expiry: '',
+  total_unit: 0, approved_rate: 0, amount: 0,
+});
+
 export default function CreateSalesOrder() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selectedPartyId, setSelectedPartyId] = useState<string>('');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [productsMap, setProductsMap] = useState<{ [key: string]: Product[] }>({});
-  
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
-  const [taxAmount, setTaxAmount] = useState<number>(0);
+  const [isSubmitting,    setIsSubmitting]    = useState(false);
+  const [customers,       setCustomers]       = useState<Customer[]>([]);
+  const [selectedPartyId, setSelectedPartyId] = useState('');
+  const [categories,      setCategories]      = useState<Category[]>([]);
+  const [productsMap,     setProductsMap]     = useState<Record<string, Product[]>>({});
+  const [taxes,           setTaxes]           = useState<TaxItem[]>([]);
+  const [selectedTax,     setSelectedTax]     = useState<TaxItem | null>(null);
+  const [batches,         setBatches]         = useState<BatchItem[]>([]);
 
   const currentUserId = Cookies.get('userId') || 'ADMIN_USER';
   const token = Cookies.get('auth_token');
 
-  const [rows, setRows] = useState<SalesItem[]>([
-    { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 },
-    { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 },
-    { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 },
-  ]);
+  const [rows, setRows] = useState<SalesItem[]>([emptyRow(), emptyRow(), emptyRow()]);
 
-  // --- API: FETCH CUSTOMERS ---
+  // ── Fetch all reference data on mount ────────────────────────────────────
   useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/party/customers`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = res.data.customers || res.data.data || res.data;
-        setCustomers(Array.isArray(data) ? data : []);
-      } catch (err) {
-        toast.error("Customer Fetch Failed");
-      }
-    };
-    fetchCustomers();
+    if (!token) return;
+    const h = { Authorization: `Bearer ${token}` };
+
+    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/party/customers`, { headers: h })
+      .then(r => { const d = r.data.customers || r.data.data || r.data; setCustomers(Array.isArray(d) ? d : []); })
+      .catch(() => toast.error("Customer fetch failed"));
+
+    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/category/`, { headers: h })
+      .then(r => setCategories(r.data.category || []))
+      .catch(() => toast.error("Category fetch failed"));
+
+    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/finance/taxes`, { headers: h })
+      .then(r => setTaxes(r.data.data || []))
+      .catch(() => {});
+
+    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/batch`, { headers: h })
+      .then(r => setBatches(Array.isArray(r.data) ? r.data : r.data.data || []))
+      .catch(() => {});
   }, [token]);
 
-  // --- API: FETCH CATEGORIES ---
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/category/`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setCategories(res.data.category || []);
-      } catch (err) {
-        toast.error("Category Error");
-      }
-    };
-    fetchCategories();
-  }, [token]);
-
-  // --- FETCH PRODUCTS BY CATEGORY ---
+  // ── Fetch products by category (cached) ──────────────────────────────────
   const fetchProducts = async (catId: string) => {
     if (!catId || productsMap[catId]) return;
     try {
@@ -100,104 +85,135 @@ export default function CreateSalesOrder() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setProductsMap(prev => ({ ...prev, [catId]: res.data }));
-    } catch (err) {
-      toast.error("Product Sync Error");
+    } catch { toast.error("Product fetch failed"); }
+  };
+
+  // ── Fetch price by product + price type ──────────────────────────────────
+  const fetchPrice = async (index: number, productId: string, priceType: string) => {
+    if (!productId || !priceType) return;
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/productprice/lookup`, {
+        params: { product_id: productId, price_type: priceType },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success && res.data.data) {
+        const rate = parseFloat(res.data.data.unit_price);
+        setRows(prev => {
+          const next = [...prev];
+          next[index] = { ...next[index], approved_rate: rate, amount: (next[index].total_unit || 0) * rate };
+          return next;
+        });
+        toast.success(`${priceType} price: PKR ${rate.toLocaleString()}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Price lookup failed");
     }
   };
 
-  const handleInputChange = async (index: number, field: keyof SalesItem, value: any) => {
-    const updatedRows = [...rows];
-    updatedRows[index] = { ...updatedRows[index], [field]: value };
+  // ── Per-row batch list filtered by product ───────────────────────────────
+  const getBatchesForProduct = (productId: string) =>
+    batches.filter(b => b.batchitem.some(bi => bi.product_id === productId));
 
-    if (field === 'category_id') {
-      updatedRows[index].product_id = '';
-      updatedRows[index].batch_no = '';
-      updatedRows[index].expiry = '';
-      fetchProducts(value);
-    }
+  // ── Row change handler ────────────────────────────────────────────────────
+  const handleInputChange = (index: number, field: keyof SalesItem, value: any) => {
+    setRows(prev => {
+      const rows = [...prev];
+      const row = { ...rows[index], [field]: value };
 
-    if (field === 'product_id' && value !== '') {
-      const categoryProducts = productsMap[updatedRows[index].category_id] || [];
-      const selectedProduct = categoryProducts.find(p => p.product_id === value);
-      if (selectedProduct && selectedProduct.batch && selectedProduct.batch.length > 0) {
-        const activeBatch = selectedProduct.batch[0];
-        updatedRows[index].batch_no = activeBatch.batch_number || '';
-        if (activeBatch.expiry_date) {
-          updatedRows[index].expiry = activeBatch.expiry_date.split('T')[0];
-        }
+      if (field === 'category_id') {
+        row.product_id = ''; row.price_type = '';
+        row.batch_id = null; row.batch_no = ''; row.expiry = '';
+        row.approved_rate = 0; row.amount = 0;
+        fetchProducts(value);
       }
-    }
 
-    if (field === 'total_unit' || field === 'approved_rate') {
-      updatedRows[index].amount = (Number(updatedRows[index].total_unit) || 0) * (Number(updatedRows[index].approved_rate) || 0);
-    }
+      if (field === 'product_id') {
+        row.price_type = '';
+        row.batch_id = null; row.batch_no = ''; row.expiry = '';
+        row.approved_rate = 0; row.amount = 0;
+      }
 
-    setRows(updatedRows);
+      if (field === 'price_type' && value && row.product_id) {
+        rows[index] = row;
+        setRows([...rows]);
+        fetchPrice(index, row.product_id, value);
+        return rows;
+      }
 
-    if (index === rows.length - 1 && field === 'product_id' && value !== '') {
-      setRows([...updatedRows, { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 }]);
-    }
+      if (field === 'total_unit' || field === 'approved_rate') {
+        row.amount = (Number(row.total_unit) || 0) * (Number(row.approved_rate) || 0);
+      }
+
+      rows[index] = row;
+
+      if (index === rows.length - 1 && field === 'product_id' && value) {
+        return [...rows, emptyRow()];
+      }
+      return rows;
+    });
+  };
+
+  // ── Batch select handler ──────────────────────────────────────────────────
+  const handleBatchSelect = (index: number, batchId: number | null) => {
+    const batch = batches.find(b => b.batch_id === batchId) ?? null;
+    setRows(prev => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        batch_id: batch?.batch_id ?? null,
+        batch_no: batch?.batch_number ?? '',
+        expiry:   batch?.expiry_date ? batch.expiry_date.split('T')[0] : '',
+      };
+      return next;
+    });
   };
 
   const removeRow = (index: number) => {
     if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
   };
 
-  const grossTotal = useMemo(() => rows.reduce((sum, item) => sum + (item.amount || 0), 0), [rows]);
-  const calculatedDiscount = useMemo(() => (grossTotal * discountPercent) / 100, [grossTotal, discountPercent]);
-  const finalPayable = useMemo(() => (grossTotal - calculatedDiscount) + taxAmount, [grossTotal, calculatedDiscount, taxAmount]);
+  // ── Totals ────────────────────────────────────────────────────────────────
+  const grossTotal = useMemo(() => rows.reduce((s, r) => s + (r.amount || 0), 0), [rows]);
+  const computedTaxAmount = useMemo(() => {
+    if (!selectedTax) return 0;
+    return selectedTax.type === 'percentage' ? (grossTotal * selectedTax.rate) / 100 : selectedTax.rate;
+  }, [grossTotal, selectedTax]);
+  const finalPayable = useMemo(() => grossTotal + computedTaxAmount, [grossTotal, computedTaxAmount]);
 
+  // ── Submit ────────────────────────────────────────────────────────────────
   const handleFinalize = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPartyId) return toast.error("Selection Error", { description: "Pehle customer select karein." });
-    
+    if (!selectedPartyId) return toast.error("Pehle customer select karein.");
     const validItems = rows.filter(r => r.product_id !== '');
-    if (validItems.length === 0) return toast.error("Empty Order");
+    if (!validItems.length) return toast.error("Kam az kam ek product select karein.");
 
     setIsSubmitting(true);
     try {
-      const payload = {
-        customerId: selectedPartyId, // party_id sent as customerId
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/distribution/sales-orders`, {
+        customerId: selectedPartyId,
         createdBy: currentUserId,
         items: validItems,
-        financials: {
-          grossTotal,
-          discountPercent,
-          discountValue: calculatedDiscount,
-          taxAmount,
-          netTotal: finalPayable
-        }
-      };
+        financials: { grossTotal, taxId: selectedTax?.tax_id ?? null, taxAmount: computedTaxAmount, netTotal: finalPayable }
+      }, { headers: { Authorization: `Bearer ${token}` } });
 
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/distribution/sales-orders`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      toast.success("ORDER DEPLOYED", { icon: <ShieldCheck className="text-emerald-500" /> });
-      
-      // Reset State
+      toast.success("Sales order submitted", { icon: <ShieldCheck className="text-emerald-500" /> });
       setSelectedPartyId('');
-      setRows([
-        { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 },
-        { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 },
-        { category_id: '', product_id: '', batch_no: '', expiry: '', total_unit: 0, approved_rate: 0, amount: 0 },
-      ]);
-      setDiscountPercent(0);
-      setTaxAmount(0);
+      setRows([emptyRow(), emptyRow(), emptyRow()]);
+      setSelectedTax(null);
     } catch (err: any) {
-      toast.error("Transmission Failed");
+      toast.error(err?.response?.data?.message || "Submission failed");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const thStyle = "text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] p-4 border-b border-white/5";
-  const inputBase = "w-full bg-[#0f172a] border border-slate-800 rounded-xl py-3 px-3 text-white focus:border-blue-500 outline-none transition-all text-xs font-medium appearance-none";
+  const thCls  = "text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] p-4 border-b border-white/5";
+  const inpCls = "w-full bg-[#0f172a] border border-slate-800 rounded-xl py-3 px-3 text-white focus:border-blue-500 outline-none transition-all text-xs font-medium appearance-none";
 
   return (
-    <div className="max-w-[1500px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
+    <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
       <Toaster position="top-right" theme="dark" richColors />
-      
+
       {/* HEADER & CUSTOMER SELECT */}
       <div className="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-8 border-l-8 border-blue-600 pl-6">
         <div className="flex-1">
@@ -209,128 +225,183 @@ export default function CreateSalesOrder() {
           </p>
         </div>
 
-        <div className="w-full lg:w-[400px] relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+        <div className="w-full lg:w-96 relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000" />
           <div className="relative bg-[#020617] rounded-2xl border border-white/10 p-4">
-             <label className="text-[9px] font-black text-blue-500 uppercase mb-2 block tracking-widest italic text-nowrap">Target Customer Account</label>
-             <div className="relative">
-                <select 
-                  className="w-full bg-slate-900 border-none rounded-xl py-4 pl-12 pr-10 text-white text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
-                  value={selectedPartyId}
-                  onChange={(e) => setSelectedPartyId(e.target.value)}
-                >
-                  <option value="">Choose Customer Account...</option>
-                  {customers.map((c) => (
-                    <option key={c.party_id} value={c.party_id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <UserCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={20} />
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={16} />
-             </div>
+            <label className="text-[9px] font-black text-blue-500 uppercase mb-2 block tracking-widest italic">Target Customer Account</label>
+            <div className="relative">
+              <select
+                className="w-full bg-slate-900 border-none rounded-xl py-4 pl-12 pr-10 text-white text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+                value={selectedPartyId}
+                onChange={e => setSelectedPartyId(e.target.value)}
+              >
+                <option value="">Choose Customer Account...</option>
+                {customers.map(c => <option key={c.party_id} value={c.party_id} className="bg-slate-900">{c.name}</option>)}
+              </select>
+              <UserCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={20} />
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={16} />
+            </div>
           </div>
         </div>
       </div>
 
-      <form onSubmit={handleFinalize} className="bg-[#020617] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden relative">
+      <form onSubmit={handleFinalize} className="bg-[#020617] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse min-w-[1100px]">
+          <table className="w-full border-collapse min-w-[1350px]">
             <thead>
               <tr className="bg-white/[0.02]">
-                <th className="w-14 p-4 text-center text-[10px] font-black text-slate-600 uppercase tracking-widest italic">S#</th>
-                <th className={thStyle}>Category</th>
-                <th className={thStyle}>Product</th>
-                <th className={thStyle}>Batch No</th>
-                <th className={thStyle}>Expiry</th>
-                <th className={thStyle}>Qty</th>
-                <th className={thStyle}>Rate</th>
-                <th className={thStyle}>Amount</th>
-                <th className="w-14"></th>
+                <th className="w-12 p-4 text-center text-[10px] font-black text-slate-600 uppercase tracking-widest italic">S#</th>
+                <th className={thCls}>Category</th>
+                <th className={thCls}>Product</th>
+                <th className={thCls}>Price Type</th>
+                <th className={thCls}>Batch</th>
+                <th className={thCls}>Expiry</th>
+                <th className={thCls}>Qty</th>
+                <th className={thCls}>Rate</th>
+                <th className={thCls}>Amount</th>
+                <th className="w-12" />
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {rows.map((row, index) => (
-                <tr key={`row-${index}`} className="group hover:bg-blue-600/[0.02] transition-all">
-                  <td className="p-4 text-center font-black text-slate-700 text-xs italic">{index + 1}</td>
-                  <td className="p-2 w-[200px]">
-                    <select className={inputBase} value={row.category_id} onChange={(e) => handleInputChange(index, 'category_id', e.target.value)}>
-                      <option value="">Category</option>
-                      {categories.map(cat => <option key={cat.product_category_id} value={cat.product_category_id}>{cat.category}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2 w-[220px]">
-                    <select className={inputBase} value={row.product_id} disabled={!row.category_id} onChange={(e) => handleInputChange(index, 'product_id', e.target.value)}>
-                      <option value="">Product</option>
-                      {(productsMap[row.category_id] || []).map(p => <option key={p.product_id} value={p.product_id}>{p.name}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2"><input type="text" className={inputBase + " text-center uppercase"} value={row.batch_no} onChange={(e) => handleInputChange(index, 'batch_no', e.target.value)} /></td>
-                  <td className="p-2"><input type="date" className={inputBase} value={row.expiry} onChange={(e) => handleInputChange(index, 'expiry', e.target.value)} /></td>
-                  <td className="p-2 w-24"><input type="number" className={inputBase + " text-center"} value={row.total_unit || ''} onChange={(e) => handleInputChange(index, 'total_unit', e.target.value)} /></td>
-                  <td className="p-2 w-28"><input type="number" className={inputBase + " text-right text-blue-400 font-mono"} value={row.approved_rate || ''} onChange={(e) => handleInputChange(index, 'approved_rate', e.target.value)} /></td>
-                  <td className="p-4 text-right text-xs font-black text-white italic">{row.amount.toLocaleString()}</td>
-                  <td className="p-2">
-                    <button type="button" onClick={() => removeRow(index)} className="p-2 text-slate-800 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row, index) => {
+                const productBatches = row.product_id ? getBatchesForProduct(row.product_id) : [];
+                return (
+                  <tr key={`row-${index}`} className="group hover:bg-blue-600/[0.02] transition-all">
+                    <td className="p-4 text-center font-black text-slate-700 text-xs italic">{index + 1}</td>
+
+                    {/* Category */}
+                    <td className="p-2 w-44">
+                      <select className={inpCls} value={row.category_id}
+                        onChange={e => handleInputChange(index, 'category_id', e.target.value)}>
+                        <option value="">Category</option>
+                        {categories.map(c => <option key={c.product_category_id} value={c.product_category_id} className="bg-[#0f172a]">{c.category}</option>)}
+                      </select>
+                    </td>
+
+                    {/* Product */}
+                    <td className="p-2 w-48">
+                      <select className={inpCls + " disabled:opacity-30"} value={row.product_id}
+                        disabled={!row.category_id}
+                        onChange={e => handleInputChange(index, 'product_id', e.target.value)}>
+                        <option value="">Product</option>
+                        {(productsMap[row.category_id] || []).map(p => <option key={p.product_id} value={p.product_id} className="bg-[#0f172a]">{p.name}</option>)}
+                      </select>
+                    </td>
+
+                    {/* Price Type */}
+                    <td className="p-2 w-36">
+                      <select className={inpCls + " disabled:opacity-30"} value={row.price_type}
+                        disabled={!row.product_id}
+                        onChange={e => handleInputChange(index, 'price_type', e.target.value)}>
+                        <option value="">Price Type</option>
+                        <option value="RETAIL"      className="bg-[#0f172a]">Retail</option>
+                        <option value="WHOLESALE"   className="bg-[#0f172a]">Wholesale</option>
+                        <option value="DISTRIBUTER" className="bg-[#0f172a]">Distributor</option>
+                      </select>
+                    </td>
+
+                    {/* Batch dropdown */}
+                    <td className="p-2 w-44">
+                      <select
+                        className={inpCls + " disabled:opacity-30"}
+                        disabled={!row.product_id}
+                        value={row.batch_id ?? ''}
+                        onChange={e => handleBatchSelect(index, e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">Select Batch</option>
+                        {productBatches.map(b => {
+                          const avail = b.batchitem.find(bi => bi.product_id === row.product_id)?.available_quantity ?? 0;
+                          return (
+                            <option key={b.batch_id} value={b.batch_id} className="bg-[#0f172a]">
+                              {b.batch_number} | Avail: {avail}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </td>
+
+                    {/* Expiry (readonly, auto-filled) */}
+                    <td className="p-2 w-32">
+                      <input type="text" readOnly
+                        className={inpCls + " text-center text-slate-400 cursor-default"}
+                        value={row.expiry || '—'}
+                      />
+                    </td>
+
+                    <td className="p-2 w-24"><input type="number" className={inpCls + " text-center"} value={row.total_unit || ''} onChange={e => handleInputChange(index, 'total_unit', e.target.value)} /></td>
+                    <td className="p-2 w-28"><input type="number" className={inpCls + " text-right text-blue-400 font-mono"} value={row.approved_rate || ''} onChange={e => handleInputChange(index, 'approved_rate', e.target.value)} /></td>
+                    <td className="p-4 text-right text-xs font-black text-white italic">{row.amount.toLocaleString()}</td>
+                    <td className="p-2">
+                      <button type="button" onClick={() => removeRow(index)}
+                        className="p-2 text-slate-800 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
-        {/* SUMMARY SECTION */}
+        {/* SUMMARY */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 p-10 bg-white/[0.01] border-t border-white/5">
           <div className="md:col-span-4 space-y-6">
             <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">Adjustment Engine</h3>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="relative group">
-                <input type="number" placeholder="Discount %" className={inputBase + " pl-10 h-14 bg-slate-900"} value={discountPercent || ''} onChange={(e) => setDiscountPercent(Number(e.target.value))} />
-                <Percent className="absolute left-3 top-4 text-blue-600" size={20} />
-              </div>
-              <div className="relative group">
-                <input type="number" placeholder="Tax Amount" className={inputBase + " pl-10 h-14 bg-slate-900"} value={taxAmount || ''} onChange={(e) => setTaxAmount(Number(e.target.value))} />
-                <ReceiptIndianRupee className="absolute left-3 top-4 text-emerald-600" size={20} />
-              </div>
+            <div className="relative">
+              <select
+                className={inpCls + " pl-10 h-14 bg-slate-900 text-sm"}
+                value={selectedTax?.tax_id ?? ''}
+                onChange={e => setSelectedTax(taxes.find(t => t.tax_id === Number(e.target.value)) || null)}
+              >
+                <option value="">— No Tax —</option>
+                {taxes.map(t => (
+                  <option key={t.tax_id} value={t.tax_id} className="bg-[#0f172a]">
+                    {t.name} ({t.rate}{t.type === 'percentage' ? '%' : ' PKR'})
+                  </option>
+                ))}
+              </select>
+              <ReceiptIndianRupee className="absolute left-3 top-4 text-emerald-600 pointer-events-none" size={20} />
             </div>
           </div>
 
-          <div className="md:col-span-3"></div>
+          <div className="md:col-span-3" />
 
           <div className="md:col-span-5">
             <div className="bg-slate-900/50 rounded-[2rem] p-8 border border-white/5 space-y-4 shadow-inner">
-               <div className="flex justify-between items-center text-slate-500 text-[10px] font-bold uppercase tracking-widest italic">
-                 <span>Gross Subtotal</span>
-                 <span className="text-white">PKR {grossTotal.toLocaleString()}</span>
-               </div>
-               <div className="flex justify-between items-center text-rose-500 text-[10px] font-bold uppercase tracking-widest italic border-b border-white/10 pb-4">
-                 <span>Markdown Applied</span>
-                 <span className="font-mono">-{calculatedDiscount.toLocaleString()}</span>
-               </div>
-               <div className="flex justify-between items-center pt-2">
-                 <span className="text-white font-black text-sm uppercase italic">Final Payable</span>
-                 <span className="text-4xl font-black text-blue-500 italic tracking-tighter">
-                   PKR {finalPayable.toLocaleString()}
-                 </span>
-               </div>
+              <div className="flex justify-between items-center text-slate-500 text-[10px] font-bold uppercase tracking-widest italic">
+                <span>Gross Subtotal</span>
+                <span className="text-white">PKR {grossTotal.toLocaleString()}</span>
+              </div>
+              {selectedTax && (
+                <div className="flex justify-between items-center text-emerald-500 text-[10px] font-bold uppercase tracking-widest border-b border-white/10 pb-3">
+                  <span>{selectedTax.name} ({selectedTax.rate}{selectedTax.type === 'percentage' ? '%' : ' PKR'})</span>
+                  <span>+ PKR {computedTaxAmount.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-white font-black text-sm uppercase italic">Final Payable</span>
+                <span className="text-4xl font-black text-blue-500 italic tracking-tighter">
+                  PKR {finalPayable.toLocaleString()}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* FOOTER ACTIONS */}
+        {/* FOOTER */}
         <div className="p-10 bg-[#020617] border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4 bg-white/5 px-8 py-4 rounded-full border border-white/5">
             <Calculator className="text-blue-500" size={20} />
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest italic">Logic Engine Active</span>
           </div>
-
           <div className="flex gap-4 w-full md:w-auto">
-            <button type="button" onClick={() => window.location.reload()} className="flex-1 md:flex-none bg-white/5 text-slate-500 font-black px-10 py-5 rounded-2xl uppercase text-[10px] tracking-widest border border-white/5 hover:bg-rose-500/10 hover:text-rose-500 transition-all">Clear Form</button>
-            <button 
-              type="submit" 
-              disabled={isSubmitting} 
-              className="flex-[2] md:flex-none bg-blue-600 hover:bg-blue-500 text-white font-black px-16 py-5 rounded-2xl uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20 disabled:opacity-50"
-            >
+            <button type="button" onClick={() => window.location.reload()}
+              className="flex-1 md:flex-none bg-white/5 text-slate-500 font-black px-10 py-5 rounded-2xl uppercase text-[10px] tracking-widest border border-white/5 hover:bg-rose-500/10 hover:text-rose-500 transition-all">
+              Clear Form
+            </button>
+            <button type="submit" disabled={isSubmitting}
+              className="flex-2 md:flex-none bg-blue-600 hover:bg-blue-500 text-white font-black px-16 py-5 rounded-2xl uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20 disabled:opacity-50">
               {isSubmitting ? <Loader2 className="animate-spin" /> : <><Wallet size={18} /> Deploy Sales Order</>}
             </button>
           </div>

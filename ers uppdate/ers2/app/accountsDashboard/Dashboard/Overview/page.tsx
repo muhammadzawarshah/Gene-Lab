@@ -32,7 +32,7 @@ export default function AccountsHome() {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const userId = Cookies.get('userId'); 
+        const userId = Cookies.get('userId') || Cookies.get('user_id'); 
         const token = Cookies.get('auth_token');
 
         if (!userId) {
@@ -42,11 +42,8 @@ export default function AccountsHome() {
         }
 
         // Axios Call with Headers & Params
-        const response = await axios.get(`${API_BASE_URL}/accounts/dashboard`, {
-          params: { userId },
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const response = await axios.get(`${API_BASE_URL}/api/v1/finance/accounts-dashboard`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         setData(response.data);
@@ -102,7 +99,7 @@ export default function AccountsHome() {
             Nexus <span className="text-blue-500">Finance</span>
           </h1>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-2 italic">
-            Command Center • ID: {Cookies.get('userId')?.slice(-6).toUpperCase()}
+            Command Center • ID: {(Cookies.get('userId') || Cookies.get('user_id'))?.slice(-6).toUpperCase()}
           </p>
         </motion.div>
         

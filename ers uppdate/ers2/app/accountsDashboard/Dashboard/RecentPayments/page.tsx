@@ -38,7 +38,7 @@ export default function RecentPayments() {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const userId = Cookies.get('userId');
+        const userId = Cookies.get('userId') || Cookies.get('user_id');
         const token = Cookies.get('auth_token');
 
         if (!userId) {
@@ -46,7 +46,7 @@ export default function RecentPayments() {
           return;
         }
 
-        const response = await axios.get(`${API_BASE_URL}/accounts/history`, {
+        const response = await axios.get(`${API_BASE_URL}/api/v1/accounts/history`, {
           params: { userId },
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -79,7 +79,7 @@ export default function RecentPayments() {
         const token = Cookies.get('auth_token');
         const userId = Cookies.get('userId');
 
-        await axios.post(`${API_BASE_URL}/accounts/reverse-transaction`, {
+        await axios.post(`${API_BASE_URL}/api/v1/accounts/reverse-transaction`, {
           transactionId: id,
           userId
         }, {
