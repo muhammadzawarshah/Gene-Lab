@@ -115,4 +115,33 @@ export class UserController {
       res.status(500).json({ message: "Failed to update network node" });
     }
   }
+
+  static async updateProfile(req: Request, res: Response) {
+    try {
+      const id = req.params.id;
+      const { username } = req.body;
+      const updated = await UserService.update(Number(id), { username });
+      res.status(200).json({ success: true, data: updated });
+    } catch (error) {
+      console.error('Profile Update Error:', error);
+      res.status(500).json({ message: 'Failed to update profile' });
+    }
+  }
+
+  static async changePassword(req: Request, res: Response) {
+    try {
+      const id = req.params.id;
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: 'Current and new password are required' });
+      }
+      await UserService.changePassword(Number(id), currentPassword, newPassword);
+      res.status(200).json({ success: true, message: 'Password updated successfully' });
+    } catch (error: any) {
+      if (error.message === 'CURRENT_PASSWORD_WRONG') {
+        return res.status(401).json({ message: 'Current password is incorrect' });
+      }
+      res.status(500).json({ message: 'Failed to change password' });
+    }
+  }
 }

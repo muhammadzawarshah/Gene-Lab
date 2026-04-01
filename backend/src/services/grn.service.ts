@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 
 
 export class GrnService {
-  static async processGRN(poId: number, warehouseId: number, items: any[]) {
+  static async processGRN(poId: number, warehouseId: number, items: any[], discount : string ,transportCharges : string , netTotal : number ) {
   return await prisma.$transaction(async (tx) => {
 
     const grn = await tx.grn.create({
@@ -12,7 +12,10 @@ export class GrnService {
         po_id: Number(poId),
         received_date: new Date(),
         status: 'COMPLETED',
-        grn_number: `GRN-${Date.now()}`
+        grn_number: `GRN-${Date.now()}`,
+        discount : discount,
+        transportcharges : transportCharges,
+        nettotal : String(netTotal)
       }
     });
 
@@ -30,14 +33,18 @@ export class GrnService {
       // 3. Create or Update Batch
       const batchEntry = await tx.batch.create({
         data: {
-          product_id: item.product_id,
           batch_number: bNumber,
           manufacturing_date: item.mfg_date ? new Date(item.mfg_date) : null,
           expiry_date: item.expiry_date ? new Date(item.expiry_date) : null,
-          received_quantity: qtyToReceive,
-          available_quantity: qtyToReceive,
           status: 'ACTIVE',
-          location_id: Number(warehouseId)
+          location_id: Number(warehouseId),
+          batchitem: {
+            create: {
+              product_id: item.product_id,
+              received_quantity: qtyToReceive,
+              available_quantity: qtyToReceive,
+            }
+          }
         }
       });
 
@@ -125,12 +132,26 @@ export class GrnService {
           batch: {
             select: {
               batch_number: true,
-              expiry_date: true
+              expiry_date: true,
+              manufacturing_date: true
             }
           },
           uom: {
             select: {
               name: true
+            }
+          },
+          purchaseorderline: {
+            select: {
+              unit_price: true,
+              line_total: true,
+              tax: {
+                select: {
+                  name: true,
+                  rate: true,
+                  type: true
+                }
+              }
             }
           }
         }
@@ -162,7 +183,8 @@ static async getGRNById(identifier: string | number) {
         include: {
           product: { select: { name: true, sku_code: true } },
           batch: { select: { batch_number: true, expiry_date: true, manufacturing_date: true } },
-          uom: { select: { name: true } }
+          uom: { select: { name: true } },
+          purchaseorderline: { select: { unit_price: true, line_total: true, tax: { select: { name: true, rate: true, type: true } } } }
         }
       }
     }

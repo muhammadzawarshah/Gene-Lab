@@ -2,7 +2,7 @@ import { prisma } from '../lib/prisma.js';
 
 export class WarehouseService {
   // 1. Create: Naya Warehouse (Name, LocationID, Type)
-static async createWarehouse(data: { name: string; locationId: number; type: string }) {
+static async createWarehouse(data: { name: string; locationId: number; type: string; districtId?: number }) {
   // 1. Pehle sabse bari ID nikalein (Manual ID Management)
   const lastWarehouse = await prisma.warehouse.findFirst({
     orderBy: { warehouse_id: 'desc' },
@@ -15,9 +15,10 @@ static async createWarehouse(data: { name: string; locationId: number; type: str
 
   return await prisma.warehouse.create({
     data: {
-      warehouse_id: nextId, // Hum ne manually ID manage kar li
+      warehouse_id: nextId,
       name: data.name,
       location: Number(data.locationId),
+      district_id: data.districtId ? Number(data.districtId) : null,
       type: data.type && data.type.trim() !== "" ? data.type : "GENERAL"
     }
   });
@@ -28,6 +29,7 @@ static async createWarehouse(data: { name: string; locationId: number; type: str
     return await prisma.warehouse.findMany({
       include: {
         province: true,
+        district: true,
         _count: { select: { stockitem: true } }
       },
       orderBy: { warehouse_id: 'asc' }
@@ -35,7 +37,7 @@ static async createWarehouse(data: { name: string; locationId: number; type: str
   }
 
   // 3. Update: Edit details
-  static async updateWarehouse(id: number, data: { name?: string; locationId?: number; type?: string }) {
+  static async updateWarehouse(id: number, data: { name?: string; locationId?: number; type?: string; districtId?: number }) {
     // 1. Pehle check karein ke warehouse exist karta hai
     const existing = await prisma.warehouse.findUnique({
       where: { warehouse_id: id }
@@ -51,6 +53,7 @@ static async createWarehouse(data: { name: string; locationId: number; type: str
       data: {
         name: data.name !== undefined ? data.name : existing.name,
         location: data.locationId !== undefined ? Number(data.locationId) : existing.location,
+        district_id: data.districtId !== undefined ? Number(data.districtId) : existing.district_id,
         type: data.type !== undefined ? data.type : existing.type
       }
     });

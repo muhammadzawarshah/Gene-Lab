@@ -6,7 +6,7 @@ import mqEmitter from '../../../utils/eventEmitter.js';
 export const receiveGoods = async (req: Request, res: Response, next: NextFunction) => {
   try {
     console.log(req.body)
-    const { poId, warehouseId, items } = req.body;
+    const { poId, warehouseId, items , discount ,transportCharges , netTotal  } = req.body;
 
     // 1. Basic Validation
     if (!poId || !warehouseId || !items || items.length === 0) {
@@ -17,7 +17,7 @@ export const receiveGoods = async (req: Request, res: Response, next: NextFuncti
     }
 
     // 2. Call Service to handle GRN, Batch creation, and Inventory update
-    const grn = await GrnService.processGRN(poId, warehouseId, items);
+    const grn = await GrnService.processGRN(poId, warehouseId, items ,discount ,transportCharges , netTotal );
 
     // 3. Emit Event for MQ (Asynchronous Reporting update)
     mqEmitter.emit('GRN_COMPLETED', { 

@@ -20,10 +20,12 @@ export class DeliveryService {
 
       for (const line of orderLines) {
         // 1. Logic for Batch Picking (FIFO)
-        const availableBatch = await tx.batch.findFirst({
+        const availableBatchItem = await tx.batchitem.findFirst({
           where: { product_id: line.product_id, available_quantity: { gte: line.quantity } },
-          orderBy: { manufacturing_date: 'asc' }
+          include: { batch: true },
+          orderBy: { batch: { manufacturing_date: 'asc' } }
         });
+        const availableBatch = availableBatchItem?.batch ?? null;
 
         // 2. Reduce Stock Hand and Reserved
         await tx.stockitem.update({

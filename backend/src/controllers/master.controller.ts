@@ -287,7 +287,13 @@ export class ERPController {
                 prisma.warehouse.findMany(),
                 prisma.province.findMany(),
                 prisma.tax.findMany(),
-                prisma.batch.findMany(),
+                prisma.batch.findMany({
+                    include: {
+                        batchitem: { include: { product: { select: { product_id: true, name: true, sku_code: true } } } },
+                        province: { select: { province_id: true, name: true } }
+                    },
+                    orderBy: { batch_id: 'desc' }
+                }),
             ]);
 
             res.json({

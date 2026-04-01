@@ -4,7 +4,7 @@ import { ReportController } from '../controllers/report/report.controller.js';
 
 const router = Router();
 
-// Flow E: Analytics & Summaries
+router.get('/dashboard', ReportController.getDashboard);
 router.get('/inventory-summary', ReportController.getInventoryDashboard);
 router.get('/financial-performance', ReportController.getFinancialReport);
 

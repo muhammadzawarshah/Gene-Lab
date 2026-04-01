@@ -4,8 +4,8 @@ import { WarehouseService } from '../../services/warehouse.service.js';
 export const createWarehouse = async (req: Request, res: Response) => {
   try {
     console.log(req.body);
-    const { name, locationId, type } = req.body;
-    const result = await WarehouseService.createWarehouse({ name, locationId, type });
+    const { name, locationId, type, districtId } = req.body;
+    const result = await WarehouseService.createWarehouse({ name, locationId, type, districtId });
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     console.log(error)
@@ -35,16 +35,17 @@ export const deleteWarehouse = async (req: Request, res: Response) => {
 export const updateWarehouse = async (req: Request, res: Response) => {
   try {
     const { id } = req.params; // URL se ID aye gi: /update/101
-    const { name, locationId, type } = req.body;
+    const { name, locationId, type, districtId } = req.body;
 
     if (!id) {
       return res.status(400).json({ success: false, message: "Warehouse ID is required" });
     }
 
-    const updated = await WarehouseService.updateWarehouse(Number(id), { 
-      name, 
-      locationId, 
-      type 
+    const updated = await WarehouseService.updateWarehouse(Number(id), {
+      name,
+      locationId,
+      type,
+      districtId
     });
 
     res.status(200).json({

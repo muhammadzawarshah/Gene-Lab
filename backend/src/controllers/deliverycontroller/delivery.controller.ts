@@ -5,10 +5,10 @@ import { DeliveryService } from '../../services/delivery.service.js';
 export const postDelivery = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { soId } = req.params;
-    const { warehouse_id} = req.body;
-    console.log(req.params);
+    // Request body se correct casing ke saath data nikaalein
+    const { warehouse_id, discount, transportCharges, totalAmount, products } = req.body;
     console.log(req.body);
-    // Validation: Check if IDs are provided
+    // Validation
     if (!soId || !warehouse_id) {
       return res.status(400).json({ 
         success: false, 
@@ -16,8 +16,15 @@ export const postDelivery = async (req: Request, res: Response, next: NextFuncti
       });
     }
 
-    // Service Call: Logic handles stock decrement and movement records
-    const deliveryNote = await DeliveryService.shipOrder(Number(soId), Number(warehouse_id));
+    // Service Call (products array pass kar rahe hain)
+    const deliveryNote = await DeliveryService.shipOrder(
+      Number(soId), 
+      Number(warehouse_id), 
+      discount, 
+      transportCharges, 
+      totalAmount, 
+      products
+    );
 
     res.status(201).json({
       success: true,
@@ -25,7 +32,6 @@ export const postDelivery = async (req: Request, res: Response, next: NextFuncti
       data: deliveryNote
     });
   } catch (error: any) {
-    // Error handling (Insufficient stock or database issues)
     next(error); 
   }
 };

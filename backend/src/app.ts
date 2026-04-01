@@ -7,7 +7,7 @@ import { globalErrorHandler } from './middlewares/error.middleware.js';
 const app = express();
 
 // Security Middlewares
-app.use(helmet()); // Sets various HTTP headers for security
+// app.use(helmet()); // Sets various HTTP headers for security
 app.use(cors());
 app.use(express.json());
 

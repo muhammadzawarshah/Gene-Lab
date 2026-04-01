@@ -54,4 +54,39 @@ export class PartyService {
       include: { addresses: true, tax: true }
     });
   }
+
+  // 4. Update Party
+  static async updateParty(id: string, data: any) {
+    return await prisma.party.update({
+      where: { party_id: id },
+      data: {
+        name:    data.name,
+        email:   data.email,
+        phone:   data.phone,
+        tax_id:  data.tax_id ? parseInt(data.tax_id) : undefined,
+        ...(data.address_line1 && {
+          addresses: {
+            updateMany: {
+              where: { party_id: id },
+              data: {
+                line1:       data.address_line1,
+                city:        data.city,
+                country:     data.country,
+                postal_code: data.postal_code
+              }
+            }
+          }
+        })
+      },
+      include: { addresses: true }
+    });
+  }
+
+  // 5. Delete Party
+  static async deleteParty(id: string) {
+    const linked = await prisma.salesorder.count({ where: { party_id_customer: id } });
+    if (linked > 0) throw new Error('PARTY_HAS_ORDERS: Cannot delete a distributor with existing orders.');
+    await prisma.addresses.deleteMany({ where: { party_id: id } });
+    return await prisma.party.delete({ where: { party_id: id } });
+  }
 }

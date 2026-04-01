@@ -6,8 +6,8 @@ import mqEmitter from '../../../utils/eventEmitter.js';
 
 export const receiveGoods = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { poId, warehouseId, items } = req.body;
-    const grn = await GrnService.processGRN(poId, warehouseId, items);
+    const { poId, warehouseId, items ,discount ,transportCharges , netTotal  } = req.body;
+    const grn = await GrnService.processGRN(poId, warehouseId, items,discount ,transportCharges , netTotal );
     
     // Emit Event for MQ
     mqEmitter.emit('GRN_COMPLETED', { grnId: grn.grn_id, timestamp: new Date() });

@@ -3,100 +3,139 @@ import { prisma } from '../lib/prisma.js';
 import { source_doctype_enum } from "@prisma/client";
 
 export class DeliveryService {
- static async shipOrder(soId: number, warehouseId: number) {
-    return await prisma.$transaction(async (tx) => {
-      // 1. Sales order lines fetch karein
-      const orderLines = await tx.salesorderline.findMany({
-        where: { so_id: soId }
-      });
+static async shipOrder(
+  soId: number, 
+  warehouseId: number, 
+  discount: string, 
+  transportCharges: string, 
+  totalAmount: string, 
+  products: any[] 
+) {
+  return await prisma.$transaction(async (tx) => {
+    
+    // 1. Sales order lines fetch karein
+    const orderLines = await tx.salesorderline.findMany({
+      where: { so_id: Number(soId) }
+    });
 
-      if (orderLines.length === 0) throw new Error("Sales Order has no items.");
+    if (!orderLines || orderLines.length === 0) {
+      throw new Error("Sales Order has no items in database.");
+    }
 
-      // --- 2. AUTO GENERATE DELIVERY NUMBER (DN-YYYYMMDD-00X) ---
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // e.g., 20260224
-      
-      const lastDelivery = await tx.deliverynote.findFirst({
-        where: { delivery_number: { startsWith: `DN-${dateStr}` } },
-        orderBy: { delivery_number: 'desc' }
-      });
+    // --- 2. DELIVERY NUMBER GENERATION ---
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); 
+    const lastDelivery = await tx.deliverynote.findFirst({
+      where: { delivery_number: { startsWith: `DN-${dateStr}` } },
+      orderBy: { delivery_number: 'desc' }
+    });
 
-      let nextSeq = "001";
-      if (lastDelivery && lastDelivery.delivery_number) {
-        const lastSeq = parseInt(lastDelivery.delivery_number.split('-')[2] as any);
+    let nextSeq = "001";
+    if (lastDelivery && lastDelivery.delivery_number) {
+      const parts = lastDelivery.delivery_number.split('-');
+      if (parts.length === 3) {
+        const lastSeq = parseInt(parts[2] as any);
         nextSeq = (lastSeq + 1).toString().padStart(3, '0');
       }
-      const deliveryNumber = `DN-${dateStr}-${nextSeq}`;
+    }
+    const deliveryNumber = `DN-${dateStr}-${nextSeq}`;
 
-      // 3. Delivery Note create karein
-      const delivery = await tx.deliverynote.create({
-        data: {
-          so_id: soId,
-          delivery_number: deliveryNumber, 
-          delv_date: today,
-          status: 'POSTED'
+    // 3. Delivery Note Master Record create karein
+    const delivery = await tx.deliverynote.create({
+      data: {
+        so_id: Number(soId),
+        delivery_number: deliveryNumber, 
+        delv_date: today,
+        status: 'POSTED',
+        discount: String(discount || "0"),
+        transportcharges: String(transportCharges || "0"),
+        nettotal: String(totalAmount || "0"),
+      }
+    });
+
+    // 4. Loop through each line item
+    for (const line of orderLines) {
+      
+      // --- MATCHING LOGIC ---
+      // Frontend array mein is product ko dhoondo (Matching UUIDs as Strings)
+      const matchedProduct = (products || []).find(p => 
+        String(p.product_id) === String(line.product_id) || String(p.id) === String(line.product_id)
+      );
+
+      let finalBatchId = null;
+
+      if (matchedProduct) {
+        // User ne dropdown se jo batch number (string) select kiya hai
+        const selectedBatchNumber = matchedProduct.batch; 
+
+        // Us product ke batchOptions mein se asli batch_id (integer) nikalo
+        const batchData = (matchedProduct.batchOptions || []).find((b: any) => 
+          String(b.batch_number) === String(selectedBatchNumber)
+        );
+
+        if (batchData) {
+          finalBatchId = Number(batchData.batch_id);
+        }
+      }
+
+      // --- 5. STOCK RECORD CHECK ---
+      const existingStock = await tx.stockitem.findUnique({
+        where: {
+          product_id_warehouse_id: {
+            product_id: line.product_id,
+            warehouse_id: Number(warehouseId)
+          }
         }
       });
 
-      for (const line of orderLines) {
-        // --- 4. PRE-CHECK STOCK RECORD (Strict Update Logic) ---
-        const existingStock = await tx.stockitem.findUnique({
-          where: {
-            product_id_warehouse_id: {
-              product_id: line.product_id,
-              warehouse_id: warehouseId
-            }
-          }
-        });
-
-        if (!existingStock) {
-          throw new Error(`Stock record not found for product ID: ${line.product_id} in Warehouse ID: ${warehouseId}. Please initialize stock first.`);
-        }
-
-        // 5. Delivery Note Line create karein
-        await tx.deliverynoteline.create({
-          data: {
-            delv_note_id: delivery.delv_note_id,
-            product_id: line.product_id,
-            delivered_qty: line.quantity,
-            uom_id: line.uom_id,
-            so_line_id: line.so_line_id,
-            remarks: "Shipped from warehouse"
-          }
-        });
-
-        // 6. Stock Item update (Inventory kam karein)
-        await tx.stockitem.update({
-          where: {
-            product_id_warehouse_id: {
-              product_id: line.product_id,
-              warehouse_id: warehouseId
-            }
-          },
-          data: {
-            quantity_on_hand: { decrement: line.quantity },
-            reserved_quantity: { decrement: line.quantity }
-          }
-        });
-
-        // 7. Stock Movement record create karein
-        await tx.stockmovement.create({
-          data: {
-            mov_type: 'OUTBOUND',
-            source_doctype: source_doctype_enum.SALE_ORDER,
-            product_id: line.product_id,
-            warehouse_from_id: warehouseId,
-            quantity: line.quantity,
-            uom_id: line.uom_id,
-            posted_at: new Date()
-          }
-        });
+      if (!existingStock) {
+        throw new Error(`Stock record not found for Product ID: ${line.product_id}`);
       }
 
-      return delivery;
-    });
-  }
+      // 6. Delivery Note Line create karein (Mapping frontend batch to DB ID)
+      await tx.deliverynoteline.create({
+        data: {
+          delv_note_id: delivery.delv_note_id,
+          product_id: line.product_id,
+          delivered_qty: line.quantity,
+          uom_id: line.uom_id,
+          batch_id: finalBatchId, // <--- Ab ye perfect Integer store hoga (NaN nahi aayega)
+          so_line_id: line.so_line_id,
+          remarks: "Shipped from warehouse"
+        }
+      });
 
+      // 7. Inventory Update (Quantity kam karein)
+      await tx.stockitem.update({
+        where: {
+          product_id_warehouse_id: {
+            product_id: line.product_id,
+            warehouse_id: Number(warehouseId)
+          }
+        },
+        data: {
+          quantity_on_hand: { decrement: line.quantity },
+          reserved_quantity: { decrement: line.quantity } 
+        }
+      });
+
+      // 8. Stock Movement (History)
+      await tx.stockmovement.create({
+        data: {
+          mov_type: 'OUTBOUND',
+          source_doctype: 'SALE_ORDER', 
+          product_id: line.product_id,
+          warehouse_from_id: Number(warehouseId),
+          quantity: line.quantity,
+          uom_id: line.uom_id,
+          posted_at: new Date()
+        }
+      });
+    }
+
+    return delivery;
+  });
+}
   static async deliverylist() {
     return prisma.deliverynote.findMany({
       include: {
@@ -112,7 +151,8 @@ export class DeliveryService {
                 productprice: true
               }
             },
-            uom: true
+            uom: true,
+            batch: true
           },
         },
       },
@@ -160,7 +200,14 @@ export class DeliveryService {
           include: {
             product: true,
             uom: true,
-            batch: true
+            batch: true,
+            salesorderline: {
+              select: {
+                unit_price: true,
+                line_total: true,
+                tax: { select: { name: true, rate: true, type: true } }
+              }
+            }
           }
         }
       }

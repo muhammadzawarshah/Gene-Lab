@@ -18,10 +18,46 @@ export class StockService {
     });
   }
 
-  static async recordMovement(tx: any, data: any) {
+  
+
+  static async getWarehouseStock(warehouseId: number) {
+    return await prisma.stockitem.findMany({
+      where: {
+        warehouse_id: warehouseId,
+      },
+      include: {
+        product: {
+          include: {
+            uom: true, // Unit of Measure details
+            productprice: true,
+          },
+        },
+      },
+    });
+  }
+
+  static async recordMovement(tx: any, data: {
+    mov_type: 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT'; // aapke enum ke mutabiq
+    product_id: string;
+    uom_id: number;
+    quantity: number;
+    warehouse_from_id?: number;
+    warehouse_to_id?: number;
+    source_doctype?: string;
+    source_doc_id?: string;
+    batch_id?: number;
+  }) {
     return await tx.stockmovement.create({
       data: {
-        ...data,
+        mov_type: data.mov_type,
+        product_id: data.product_id,
+        uom_id: data.uom_id,
+        quantity: data.quantity,
+        warehouse_from_id: data.warehouse_from_id,
+        warehouse_to_id: data.warehouse_to_id,
+        source_doctype: data.source_doctype,
+        source_doc_id: data.source_doc_id,
+        batch_id: data.batch_id,
         posted_at: new Date()
       }
     });

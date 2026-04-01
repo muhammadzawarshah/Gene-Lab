@@ -14,6 +14,7 @@ export class ProductController {
 
   static async list(req: Request, res: Response) {
     try {
+      console.log("fetching th eproducts");
       const products = await ProductService.getAllProducts();
       res.json(products);
     } catch (error: any) {
@@ -33,33 +34,51 @@ export class ProductController {
 
   static async getExpiredReport(req: Request, res: Response) {
     try {
-        const data = await ProductService.getExpiredStock();
-        
-        const formatted = data.map(item => ({
-            id: item.grn_line_id,
-            productName: item.product.name,
-            sku: item.product.sku_code,
-            batch: item.batch?.batch_number || "No Batch",
-            qty: item.received_qty,
-            expiryDate: item.expiry_date,
-            grnRef: item.grn.grn_number
-        }));
+      const data = await ProductService.getExpiredStock();
 
-        res.json({ success: true, data: formatted });
+      const formatted = data.map(item => ({
+        id: item.grn_line_id,
+        productName: item.product.name,
+        sku: item.product.sku_code,
+        batch: item.batch?.batch_number || "No Batch",
+        qty: item.received_qty,
+        expiryDate: item.expiry_date,
+        grnRef: item.grn.grn_number
+      }));
+
+      res.json({ success: true, data: formatted });
     } catch (e) {
-        res.status(500).json({ success: false, error: "Report generation failed" });
+      res.status(500).json({ success: false, error: "Report generation failed" });
     }
-}
+  }
 
-  static async getproductoncategory(req:Request,res:Response){
+  static async getproductoncategory(req: Request, res: Response) {
     try {
       console.log(req.params.id);
       const product = await ProductService.getProductcategory(req.params.id as any);
       if (!product) return res.status(404).json({ message: "Products not found on category" });
       res.status(200).json(product);
-    } catch (error : any) {
+    } catch (error: any) {
       console.log(error)
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async update(req: Request, res: Response) {
+    try {
+      const product = await ProductService.updateProduct(req.params.id as any, req.body);
+      res.json({ success: true, data: product });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async delete(req: Request, res: Response) {
+    try {
+      await ProductService.deleteProduct(req.params.id as any);
+      res.json({ success: true, message: "Product deleted successfully" });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 }

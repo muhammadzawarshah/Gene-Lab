@@ -4,7 +4,7 @@ export class FinanceService {
   /**
    * FLOW C: Generate Invoice from Delivery Note
    */
-  static async createInvoice(deliveryId: string) {
+  static async createInvoice(deliveryId: string, narration?: string, userId?: string) {
     return await prisma.$transaction(async (tx) => {
       const delivery = await tx.deliverynote.findUnique({
         where: { delivery_number: deliveryId },
@@ -25,7 +25,6 @@ export class FinanceService {
       });
 
       // 2. Create Invoice Lines
-      // FIX: cust_inv_line_id ko remove kiya kyunki wo autoincrement hai
       await tx.customerinvoiceline.createMany({
         data: delivery.salesorder.salesorderline.map((line) => ({
           cust_inv_id: invoice.cust_inv_id,
@@ -33,15 +32,96 @@ export class FinanceService {
           quantity: line.quantity,
           unit_price: line.unit_price,
           line_total: line.line_total,
+          tax_id: line.tax_id
+
         })),
         skipDuplicates: true
       } as any);
+
+      // 3. Get purchase cost for COGS calculation
+      const productIds = delivery.salesorder.salesorderline.map(l => l.product_id);
+      const latestCostLines = await tx.supplierinvoiceline.findMany({
+        where:   { product_id: { in: productIds } },
+        orderBy: { suppl_inv_line_id: 'desc' },
+        select:  { product_id: true, unit_price: true },
+      });
+      // Keep only the most recent price per product
+      const costMap = new Map<string, number>();
+      for (const cl of latestCostLines) {
+        if (cl.product_id && !costMap.has(cl.product_id)) {
+          costMap.set(cl.product_id, Number(cl.unit_price));
+        }
+      }
+      const cogsTotal = delivery.salesorder.salesorderline.reduce((sum, line) => {
+        return sum + Number(line.quantity) * (costMap.get(line.product_id ?? '') || 0);
+      }, 0);
+
+      /*
+      ==========================
+      ACCOUNTING ENTRY — Delivery Note Invoice
+        DR  1.3  Accounts Receivable   (customer owes us)
+        CR  4.1  Sales Revenue         (income earned)
+        DR  5.1  Cost of Goods Sold    (expense at purchase price)
+        CR  1.4  Inventory             (stock leaves at purchase price)
+      ==========================
+      */
+      await tx.journalentry.create({
+        data: {
+          journal_number: `SINV-${invoice.cust_inv_id}`,
+          journal_type:   "SALES",
+          date:           new Date(),
+          narration:      narration || `Sales Invoice — Delivery #${deliveryId}`,
+          posted_by:      userId ? String(userId) : null,
+          posted_at:      new Date(),
+          source_type:    "CUSTOMER_INVOICE",
+          source_id:      invoice.cust_inv_id,
+          journalline: {
+            create: [
+              {
+                // DR 1.3 Accounts Receivable — customer owes us
+                gl_account_id:      13,
+                debit:              invoice.total_amount,
+                credit:             0,
+                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+              },
+              {
+                // CR 4.1 Sales Revenue
+                gl_account_id: 41,
+                debit:  0,
+                credit: invoice.total_amount,
+                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+              },
+              {
+                // DR 5.1 Cost of Goods Sold (at purchase price)
+                gl_account_id: 51,
+                debit:  cogsTotal,
+                credit: 0,
+                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+              },
+              {
+                // CR 1.4 Inventory (stock out at cost)
+                gl_account_id: 14,
+                debit:  0,
+                credit: cogsTotal,
+                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+              },
+            ]
+          }
+        }
+      } as any);
+
+      await FinanceService.updateAccountBalances(tx, [
+        { gl_account_id: 13, debit: Number(invoice.total_amount), credit: 0 },
+        { gl_account_id: 41, debit: 0, credit: Number(invoice.total_amount) },
+        { gl_account_id: 51, debit: cogsTotal, credit: 0 },
+        { gl_account_id: 14, debit: 0, credit: cogsTotal },
+      ]);
 
       return invoice;
     });
   }
 
-    static async createInvoiceFromGRN(grnId: number) {
+    static async createInvoiceFromGRN(grnId: number, narration?: string, userId?: string) {
 
     return prisma.$transaction(async (tx) => {
 
@@ -95,7 +175,8 @@ export class FinanceService {
             product_id: line.product_id,
             quantity: line.received_qty,
             unit_price: poLine?.unit_price || 0,
-            line_total: Number(line.received_qty) * Number(poLine?.unit_price || 0)
+            line_total: Number(line.received_qty) * Number(poLine?.unit_price || 0),
+            tax_id: poLine?.tax_id
           };
 
         }) as any
@@ -104,6 +185,9 @@ export class FinanceService {
       /*
       ==========================
       ACCOUNTING ENTRY
+      Double Entry: Purchase Invoice
+        DR  1.4  Inventory          (Asset increases)
+        CR  2.1  Accounts Payable   (Liability increases)
       ==========================
       */
 
@@ -112,24 +196,36 @@ export class FinanceService {
           journal_number: `PINV-${invoice.suppl_inv_id}`,
           journal_type: "PURCHASE",
           date: new Date(),
-          source_type: "INVOICE",
+          narration: narration || `Purchase Invoice from ${grn.purchaseorder.party_id_supplier} — GRN #${grn.grn_number || grn.grn_id}`,
+          posted_by: userId ? String(userId) : null,
+          posted_at: new Date(),
+          source_type: "SUPPLIER_INVOICE",
           source_id: invoice.suppl_inv_id,
           journalline: {
             create: [
               {
-                gl_account_id: 5000,
-                debit: invoice.total_amount,
-                credit: 0
+                // DR: Inventory (Asset 1.4) — stock value increases
+                gl_account_id: 14,
+                debit:  invoice.total_amount,
+                credit: 0,
+                party_id_sub_ledger: grn.purchaseorder.party_id_supplier,
               },
               {
-                gl_account_id: 2100,
-                debit: 0,
-                credit: invoice.total_amount
+                // CR: Accounts Payable (Liability 2.1) — we owe the supplier
+                gl_account_id: 21,
+                debit:  0,
+                credit: invoice.total_amount,
+                party_id_sub_ledger: grn.purchaseorder.party_id_supplier,
               }
             ]
           }
         }
-      });
+      } as any);
+
+      await FinanceService.updateAccountBalances(tx, [
+        { gl_account_id: 14, debit: Number(invoice.total_amount), credit: 0 },
+        { gl_account_id: 21, debit: 0, credit: Number(invoice.total_amount) },
+      ]);
 
       return invoice;
 
@@ -146,9 +242,11 @@ static async processPayment(data: {
     method: any, 
     invoiceId: number, 
     remarks?: string,
+    narration?: string,
+    userId?: string,
     payment_date?: string // Date frontend se aayegi
   }) {
-    const { amount, method, invoiceId, remarks, payment_date } = data;
+    const { amount, method, invoiceId, remarks, narration, userId, payment_date } = data;
 
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -172,6 +270,7 @@ static async processPayment(data: {
             amount: Number(amount),
             reference_number: `INV-${invoiceId}`,
             created_at: new Date(),
+            created_by: userId ? String(userId) : null
           }
         });
 
@@ -186,21 +285,62 @@ static async processPayment(data: {
         });
 
         // 4. Update Invoice Status
-        // Note: Yahan logic laga sakte hain ke agar partial payment hai to 'PARTIAL' status ho
         await tx.customerinvoice.update({
           where: { cust_inv_id: Number(invoiceId) },
           data: { status: 'PAID' }
         });
 
+        /*
+        ==========================
+        ACCOUNTING ENTRY — Payment Received
+          DR  1.1/1.2  Cash or Bank         (asset increases)
+          CR  1.3      Accounts Receivable  (customer's debt cleared)
+        ==========================
+        */
+        const cashGlId = ['BANK', 'CHEQUE', 'ONLINE'].includes(String(method).toUpperCase()) ? 12 : 11;
+        await tx.journalentry.create({
+          data: {
+            journal_number: `RCPT-${payment.payment_id}`,
+            journal_type:   "RECEIPT",
+            date:           new Date(),
+            narration:      narration || remarks || `Payment received for Invoice #${invoiceId}`,
+            posted_by:      userId ? String(userId) : null,
+            posted_at:      new Date(),
+            source_type:    "PAYMENT",
+            source_id:      payment.payment_id,
+            journalline: {
+              create: [
+                {
+                  // DR Cash(11) or Bank(12)
+                  gl_account_id: cashGlId,
+                  debit:  Number(amount),
+                  credit: 0,
+                  party_id_sub_ledger: invoice.party_id_customer,
+                },
+                {
+                  // CR 1.3 Accounts Receivable
+                  gl_account_id:      13,
+                  debit:  0,
+                  credit: Number(amount),
+                  party_id_sub_ledger: invoice.party_id_customer,
+                },
+              ]
+            }
+          }
+        } as any);
+
+        await FinanceService.updateAccountBalances(tx, [
+          { gl_account_id: cashGlId, debit: Number(amount), credit: 0 },
+          { gl_account_id: 13, debit: 0, credit: Number(amount) },
+        ]);
+
         return payment;
       });
 
-      // Response hamesha controller handle karta hai, 
-      // magar agar aap yahi se bhejna chahte hain to success return karein
-      return { 
-        success: true, 
-        message: "Payment posted to ledger successfully", 
-        data: result 
+      return {
+        success: true,
+        message: "Payment posted to ledger successfully",
+        data: result
       };
 
     } catch (error: any) {
@@ -276,7 +416,13 @@ static async processPayment(data: {
 }
 
 static async getinvoice(){
-  return prisma.customerinvoice.findMany();
+  return prisma.customerinvoice.findMany({
+    include: {
+      party: { select: { name: true, phone: true, email: true } },
+      customerinvoiceline: { select: { cust_inv_line_id: true } }
+    },
+    orderBy: { cust_invoice_date: 'desc' }
+  });
 }
 
 static async specificinvoice(id: number) {
@@ -326,9 +472,11 @@ static async processPurchasePayment(data: {
     method: any, 
     invoiceId: number, 
     remarks?: string,
+    narration?: string,
+    userId?: string,
     payment_date?: string 
   }) {
-    const { amount, method, invoiceId, remarks, payment_date } = data;
+    const { amount, method, invoiceId, remarks, narration, userId, payment_date } = data;
 
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -355,6 +503,7 @@ static async processPurchasePayment(data: {
             amount: Number(amount),
             reference_number: `SUPP-INV-${invoiceId}`,
             created_at: new Date(),
+            created_by: userId ? String(userId) : null
           }
         });
 
@@ -369,21 +518,63 @@ static async processPurchasePayment(data: {
         });
 
         // 4. Update Supplier Invoice Status
-        // Aapke enum mein 'PAID' aur 'PARTIAL' dono hain
         const newStatus = Number(amount) >= Number(invoice.total_amount) ? 'PAID' : 'PARTIAL';
-
         await tx.supplierinvoice.update({
           where: { suppl_inv_id: Number(invoiceId) },
-          data: { status: newStatus as any } // Cast to any to match enum
+          data: { status: newStatus as any }
         });
+
+        /*
+        ==========================
+        ACCOUNTING ENTRY — Purchase Payment (paid to supplier)
+          DR  2.1      Accounts Payable  (liability decreases — debt cleared)
+          CR  1.1/1.2  Cash or Bank      (asset decreases — money goes out)
+        ==========================
+        */
+        const cashGlId = ['BANK', 'CHEQUE', 'ONLINE'].includes(String(method).toUpperCase()) ? 12 : 11;
+        await tx.journalentry.create({
+          data: {
+            journal_number: `PYMT-${payment.payment_id}`,
+            journal_type:   "PAYMENT",
+            date:           new Date(),
+            narration:      narration || remarks || `Supplier payment for Invoice #${invoiceId}`,
+            posted_by:      userId ? String(userId) : null,
+            posted_at:      new Date(),
+            source_type:    "PAYMENT",
+            source_id:      payment.payment_id,
+            journalline: {
+              create: [
+                {
+                  // DR 2.1 Accounts Payable — supplier debt cleared
+                  gl_account_id:      21,
+                  debit:  Number(amount),
+                  credit: 0,
+                  party_id_sub_ledger: invoice.party_id,
+                },
+                {
+                  // CR Cash(11) or Bank(12) — money goes out
+                  gl_account_id: cashGlId,
+                  debit:  0,
+                  credit: Number(amount),
+                  party_id_sub_ledger: invoice.party_id,
+                },
+              ]
+            }
+          }
+        } as any);
+
+        await FinanceService.updateAccountBalances(tx, [
+          { gl_account_id: 21, debit: Number(amount), credit: 0 },
+          { gl_account_id: cashGlId, debit: 0, credit: Number(amount) },
+        ]);
 
         return payment;
       });
 
-      return { 
-        success: true, 
-        message: "Supplier payment processed successfully", 
-        data: result 
+      return {
+        success: true,
+        message: "Supplier payment processed successfully",
+        data: result
       };
 
     } catch (error: any) {
@@ -444,10 +635,8 @@ static async purchaseInvoiceList() {
       };
     });
 
-    return {
-      success: true,
-      data: formattedInvoices
-    };
+    return formattedInvoices;
+
 
   } catch (error: any) {
     console.error("Fetch Purchase Invoice Error:", error);
@@ -469,7 +658,9 @@ static async specificPurchaseInvoice(invoiceId: number) {
             name: true,
             email: true,
             phone: true,
-            addresses: true, // Supplier ka pata
+            addresses: {
+              select: { line1: true, line2: true, city: true, postal_code: true, country: true }
+            },
           },
         },
         // 2. Invoice ke andar kaunse products hain (Line Items)
@@ -508,13 +699,11 @@ static async specificPurchaseInvoice(invoiceId: number) {
     const balanceDue = Number(invoice.total_amount) - totalPaid;
 
     return {
-      success: true,
-      data: {
-        ...invoice,
-        totalPaid,
-        balanceDue,
-      },
+      ...invoice,
+      totalPaid,
+      balanceDue,
     };
+
   } catch (error: any) {
     console.error("Fetch Specific Invoice Error:", error);
     throw new Error(error.message || "Failed to fetch invoice details");
@@ -566,4 +755,382 @@ static async custpayment(userid:number){
 
   return invoice;
 }
+
+// ─────────────────────────────────────────────
+// ACCOUNT BALANCE UPDATER (called inside every tx after journalentry.create)
+// ─────────────────────────────────────────────
+private static async updateAccountBalances(
+  tx: any,
+  lines: { gl_account_id: number; debit: number; credit: number }[]
+) {
+  const period = new Date().toISOString().slice(0, 7); // YYYY-MM
+  for (const line of lines) {
+    const dr = Number(line.debit) || 0;
+    const cr = Number(line.credit) || 0;
+    const existing = await tx.accountbalance.findFirst({
+      where: { gl_account_id: line.gl_account_id, period }
+    });
+    if (existing) {
+      const newDr = Number(existing.debit_total) + dr;
+      const newCr = Number(existing.credit_total) + cr;
+      await tx.accountbalance.update({
+        where: { acc_bal_id: existing.acc_bal_id },
+        data: {
+          debit_total: newDr,
+          credit_total: newCr,
+          closing_balance: Number(existing.opening_balance) + newDr - newCr,
+        }
+      });
+    } else {
+      // NEW PERIOD SETUP
+      // 1. Calculate Previous Period
+      const date = new Date();
+      date.setMonth(date.getMonth() - 1);
+      const prevPeriod = date.toISOString().slice(0, 7);
+
+      // 2. Fetch Previous Period Closing Balance
+      const prevBalance = await tx.accountbalance.findFirst({
+        where: { gl_account_id: line.gl_account_id, period: prevPeriod }
+      });
+
+      const openingBal = prevBalance ? Number(prevBalance.closing_balance) : 0;
+
+      // 3. Create New Period Record
+      await tx.accountbalance.create({
+        data: {
+          gl_account_id: line.gl_account_id,
+          period,
+          opening_balance: openingBal,
+          debit_total: dr,
+          credit_total: cr,
+          closing_balance: openingBal + dr - cr,
+        }
+      });
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// GENERAL LEDGER — all accounts with current balance
+// ─────────────────────────────────────────────
+static async getLedger() {
+  const period = new Date().toISOString().slice(0, 7);
+  const accounts = await prisma.glaccount.findMany({
+    include: {
+      accountbalance: { where: { period } },
+      glaccount:      { select: { name: true, gl_account_code: true } }, // parent
+    },
+    orderBy: { gl_account_code: 'asc' }
+  });
+  return accounts.map(acc => ({
+    gl_account_id:     acc.gl_account_id,
+    gl_account_code:   acc.gl_account_code,
+    name:              acc.name,
+    type:              acc.type,
+    parent_account_id: acc.parent_account_id,
+    is_control_account: acc.is_control_account,
+    parent_name:       (acc as any).glaccount?.name || null,
+    balance: acc.accountbalance[0] ?? {
+      opening_balance: 0, debit_total: 0, credit_total: 0, closing_balance: 0
+    }
+  }));
+}
+
+// ─────────────────────────────────────────────
+// LEDGER LINES — journal lines for one GL account
+// ─────────────────────────────────────────────
+static async getLedgerLines(glAccountId: number) {
+  const account = await prisma.glaccount.findUnique({ where: { gl_account_id: glAccountId } });
+  const lines = await prisma.journalline.findMany({
+    where: { gl_account_id: glAccountId },
+    include: {
+      journalentry: true,
+      party: { select: { name: true } }
+    },
+    orderBy: { journalentry: { date: 'asc' } }
+  });
+  let runningBalance = 0;
+  const linesWithBalance = lines.map(l => {
+    runningBalance += Number(l.debit) - Number(l.credit);
+    return {
+      journal_line_id:  l.journal_line_id,
+      date:             l.journalentry.date,
+      journal_number:   l.journalentry.journal_number,
+      journal_type:     l.journalentry.journal_type,
+      narration:        l.journalentry.narration,
+      party:            l.party?.name || null,
+      debit:            Number(l.debit),
+      credit:           Number(l.credit),
+      running_balance:  runningBalance,
+    };
+  });
+  return { account, lines: linesWithBalance };
+}
+
+// ─────────────────────────────────────────────
+// ACCOUNT BALANCES — trial balance / balance sheet
+// ─────────────────────────────────────────────
+static async getAccountBalances() {
+  const period = new Date().toISOString().slice(0, 7);
+  const balances = await prisma.accountbalance.findMany({
+    where: { period },
+    include: {
+      glaccount: {
+        select: { name: true, gl_account_code: true, type: true, parent_account_id: true }
+      }
+    },
+    orderBy: { glaccount: { gl_account_code: 'asc' } }
+  });
+  return balances.map(b => ({
+    gl_account_id:   b.gl_account_id,
+    code:            b.glaccount.gl_account_code,
+    name:            b.glaccount.name,
+    type:            b.glaccount.type,
+    opening_balance: Number(b.opening_balance),
+    debit_total:     Number(b.debit_total),
+    credit_total:    Number(b.credit_total),
+    closing_balance: Number(b.closing_balance),
+    period:          b.period,
+  }));
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT ALLOCATIONS
+// ─────────────────────────────────────────────
+static async getPaymentAllocations() {
+  const allocs = await prisma.paymentallocation.findMany({
+    include: {
+      payment: { include: { party: { select: { name: true } } } },
+      customerinvoice: { select: { cust_invoice_number: true, cust_inv_id: true, total_amount: true } },
+      supplierinvoice: { select: { suppl_invoice_number: true, suppl_inv_id: true, total_amount: true } }
+    },
+    orderBy: { payment_allocation_id: 'desc' }
+  });
+  return allocs.map(a => ({
+    allocation_id:     a.payment_allocation_id,
+    payment_id:        a.payment_id,
+    payment_number:    (a.payment as any).payment_number || `PMT-${a.payment_id}`,
+    payment_type:      a.payment.payment_type,
+    payment_method:    a.payment.method,
+    payment_date:      a.payment.payment_date,
+    party:             a.payment.party?.name || 'Unknown',
+    allocated_amount:  Number(a.allocated_amount),
+    remarks:           a.remarks,
+    invoice_ref:       a.customerinvoice
+      ? (a.customerinvoice.cust_invoice_number || `INV-${a.customerinvoice.cust_inv_id}`)
+      : a.supplierinvoice
+        ? (a.supplierinvoice.suppl_invoice_number || `SINV-${a.supplierinvoice.suppl_inv_id}`)
+        : 'N/A',
+    invoice_total:     a.customerinvoice
+      ? Number(a.customerinvoice.total_amount)
+      : a.supplierinvoice ? Number(a.supplierinvoice.total_amount) : 0,
+  }));
+}
+
+// ─────────────────────────────────────────────
+// ACCOUNTS DASHBOARD
+// ─────────────────────────────────────────────
+static async getAccountsDashboard() {
+  const period = new Date().toISOString().slice(0, 7);
+
+  const [arBal, apBal, cashBal, bankBal, recentJournals, pendingDeliveries, recentPayments] =
+    await Promise.all([
+      prisma.accountbalance.findFirst({ where: { gl_account_id: 13, period } }),
+      prisma.accountbalance.findFirst({ where: { gl_account_id: 21, period } }),
+      prisma.accountbalance.findFirst({ where: { gl_account_id: 11, period } }),
+      prisma.accountbalance.findFirst({ where: { gl_account_id: 12, period } }),
+      prisma.journalentry.findMany({
+        take: 8, orderBy: { date: 'desc' },
+        include: { journalline: { include: { glaccount: { select: { name: true } } } } }
+      }),
+      prisma.deliverynote.count({ where: { status: 'POSTED' } as any }),
+      prisma.payment.findMany({
+        take: 5, orderBy: { payment_date: 'desc' },
+        include: { party: { select: { name: true } } }
+      }),
+    ]);
+
+  const ar   = Number(arBal?.closing_balance   || 0);
+  const ap   = Number(apBal?.closing_balance   || 0);
+  const cash = Number(cashBal?.closing_balance || 0);
+  const bank = Number(bankBal?.closing_balance || 0);
+
+  return {
+    stats: [
+      { label: 'Accounts Receivable', value: `PKR ${ar.toLocaleString()}`,          change: 'This Month', trend: 'up'   },
+      { label: 'Accounts Payable',    value: `PKR ${Math.abs(ap).toLocaleString()}`, change: 'This Month', trend: 'down' },
+      { label: 'Cash Balance',        value: `PKR ${cash.toLocaleString()}`,         change: 'Available',  trend: 'up'   },
+      { label: 'Bank Balance',        value: `PKR ${bank.toLocaleString()}`,         change: 'Available',  trend: 'up'   },
+    ],
+    transactions: recentJournals.map(j => ({
+      id:     j.journal_number,
+      party:  j.narration || j.journal_type,
+      type:   j.journal_type,
+      amount: j.journalline.reduce((s, l) => s + Number(l.debit), 0),
+      status: 'POSTED',
+    })),
+    accounts: [
+      { name: '1.1 Cash', type: 'Cash', balance: cash },
+      { name: '1.2 Bank', type: 'Bank', balance: bank },
+      { name: '1.3 AR',   type: 'Other', balance: ar  },
+    ],
+    urgentPayables:    Math.abs(ap),
+    pendingDeliveries,
+    recentPayments: recentPayments.map(p => ({
+      id:     `PMT-${p.payment_id}`,
+      party:  (p as any).party?.name || 'Unknown',
+      type:   p.payment_type,
+      amount: Number(p.amount),
+      method: p.method,
+      date:   p.payment_date,
+    })),
+  };
+}
+
+  // ─────────────────────────────────────────────
+  // PARTY LEDGER SUMMARY
+  // ─────────────────────────────────────────────
+  static async getPartyLedgerSummary(type: 'CUSTOMER' | 'SUPPLIER') {
+    const parties = await prisma.party.findMany({
+      where: { type: type as any },
+      include: {
+        journalline: {
+          select: { debit: true, credit: true }
+        }
+      }
+    });
+
+    return parties.map(p => {
+      const balance = p.journalline.reduce((sum, l) => sum + (Number(l.debit) - Number(l.credit)), 0);
+      return {
+        id: p.party_id,
+        name: p.name,
+        email: p.email || "N/A",
+        phone: p.phone || "N/A",
+        totalBalance: balance, // For Customer
+        totalDue: Math.abs(balance), // For Vendor
+        lastActive: new Date().toLocaleDateString()
+      };
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // PARTY LEDGER DETAILS
+  // ─────────────────────────────────────────────
+  static async getPartyLedgerDetails(partyId: string) {
+    const lines = await prisma.journalline.findMany({
+      where: { party_id_sub_ledger: partyId },
+      include: { journalentry: true },
+      orderBy: { journalentry: { date: 'asc' } }
+    });
+
+    // Batch-fetch invoice & payment refs for display
+    const custInvIds  = lines.filter(l => l.journalentry.source_type === 'CUSTOMER_INVOICE').map(l => l.journalentry.source_id!);
+    const supplInvIds = lines.filter(l => l.journalentry.source_type === 'SUPPLIER_INVOICE').map(l => l.journalentry.source_id!);
+    const paymentIds  = lines.filter(l => l.journalentry.source_type === 'PAYMENT').map(l => l.journalentry.source_id!);
+
+    const [custInvoices, supplInvoices, payments] = await Promise.all([
+      custInvIds.length  ? prisma.customerinvoice.findMany({ where: { cust_inv_id:  { in: custInvIds  } }, select: { cust_inv_id: true, cust_invoice_number: true } }) : [],
+      supplInvIds.length ? prisma.supplierinvoice.findMany({ where: { suppl_inv_id: { in: supplInvIds } }, select: { suppl_inv_id: true, suppl_invoice_number: true } }) : [],
+      paymentIds.length  ? prisma.payment.findMany        ({ where: { payment_id:   { in: paymentIds  } }, select: { payment_id:  true, payment_number: true        } }) : [],
+    ]);
+
+    const custInvMap:  Record<number, string> = Object.fromEntries(custInvoices.map(i  => [i.cust_inv_id,  i.cust_invoice_number  || `INV-${i.cust_inv_id}`]));
+    const supplInvMap: Record<number, string> = Object.fromEntries(supplInvoices.map(i => [i.suppl_inv_id, i.suppl_invoice_number || `SINV-${i.suppl_inv_id}`]));
+    const paymentMap:  Record<number, string> = Object.fromEntries(payments.map(p      => [p.payment_id,  p.payment_number       || `PAY-${p.payment_id}`]));
+
+    let runningBalance = 0;
+    return lines.map(l => {
+      const dr  = Number(l.debit)  || 0;
+      const cr  = Number(l.credit) || 0;
+      runningBalance += dr - cr;
+
+      const src    = l.journalentry.source_type;
+      const srcId  = l.journalentry.source_id!;
+      const invRef = src === 'CUSTOMER_INVOICE' ? custInvMap[srcId]
+                   : src === 'SUPPLIER_INVOICE' ? supplInvMap[srcId]
+                   : src === 'PAYMENT'          ? paymentMap[srcId]
+                   : null;
+
+      return {
+        id:          l.journalentry.journal_number,
+        invoice_ref: invRef || null,
+        date:        new Date(l.journalentry.date).toLocaleDateString('en-GB'),
+        type:        l.journalentry.journal_type,
+        description: l.journalentry.narration || l.journalentry.journal_type,
+        debit:       dr,
+        credit:      cr,
+        balance:     runningBalance
+      };
+    });
+  }
+  // ─────────────────────────────────────────────
+  // DASHBOARD MODULES (RECEIVABLES, PENDING, HISTORY)
+  // ─────────────────────────────────────────────
+
+  static async getReceivables() {
+    const invoices = await prisma.customerinvoice.findMany({
+      where: { status: 'POSTED' },
+      include: { party: { select: { name: true } } },
+      orderBy: { cust_inv_due_date: 'asc' }
+    });
+
+    const now = new Date();
+    return invoices.map(inv => {
+      const dueDate = inv.cust_inv_due_date ? new Date(inv.cust_inv_due_date) : now;
+      const diffTime = now.getTime() - dueDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      return {
+        id: inv.cust_invoice_number || `INV-${inv.cust_inv_id}`,
+        customer: inv.party?.name || 'Unknown',
+        amount: Number(inv.total_amount || 0),
+        dueDate: inv.cust_inv_due_date ? inv.cust_inv_due_date.toISOString().split('T')[0] : 'N/A',
+        daysOverdue: diffDays > 0 ? diffDays : 0,
+        status: diffDays > 15 ? 'Critical' : diffDays > 0 ? 'Pending' : 'Near Due'
+      };
+    });
+  }
+
+  static async getPendingPayments() {
+    const payments = await prisma.payment.findMany({
+      where: { payment_type: 'RECEIPT' },
+      include: { 
+        party: { select: { name: true } },
+        paymentallocation: true
+      },
+      orderBy: { payment_date: 'desc' }
+    });
+
+    return payments
+      .filter(p => (p.paymentallocation || []).length === 0)
+      .map(p => ({
+        id: p.payment_number || `PMT-${p.payment_id}`,
+        customer: p.party?.name || 'Unknown',
+        amount: Number(p.amount),
+        method: p.method === 'CASH' ? 'Cash' : 'Bank Transfer',
+        submittedDate: p.payment_date.toISOString().split('T')[0],
+        referenceNo: p.reference_number || 'N/A',
+        attachment: false
+      }));
+  }
+
+  static async getPaymentHistory() {
+    const payments = await prisma.payment.findMany({
+      take: 50,
+      orderBy: { payment_date: 'desc' },
+      include: { party: { select: { name: true } } }
+    });
+
+    return payments.map(p => ({
+      id: p.payment_number || `PMT-${p.payment_id}`,
+      customer: p.party?.name || 'Unknown',
+      amount: Number(p.amount),
+      method: p.method === 'CASH' ? 'Cash' : 'Bank',
+      date: p.payment_date.toISOString().split('T')[0],
+      time: '12:00 PM', 
+      status: 'Completed',
+      ledgerImpact: p.payment_type === 'RECEIPT' ? 'Debit Cash/Bank' : 'Credit Cash/Bank'
+    }));
+  }
 }

@@ -4,12 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 export class ProductCategoryService {
   
   static async createCategory(data: any) {
+    console.log(data);
     return await prisma.productcategory.create({
-      data: {
-        product_category_id: data.product_category_id || uuidv4(), 
+      data: { 
         category: data.category,
         description: data.description
-      }
+      } as any
     });
   }
 

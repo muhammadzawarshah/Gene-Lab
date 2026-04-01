@@ -7,7 +7,7 @@ datasource db {
 }
 
 model accountbalance {
-  acc_bal_id      Int       @id
+  acc_bal_id      Int       @id @default(autoincrement())
   gl_account_id   Int
   period          String    @db.VarChar(50)
   opening_balance Decimal?  @default(0.00) @db.Decimal(15, 2)
@@ -32,19 +32,26 @@ model addresses {
 
 model batch {
   batch_id           Int                @id @default(autoincrement())
-  product_id         String             @db.Uuid
   batch_number       String             @db.VarChar(100)
   manufacturing_date DateTime?          @db.Date
   expiry_date        DateTime?          @db.Date
-  received_quantity  Decimal            @db.Decimal(15, 0)
-  available_quantity Decimal            @db.Decimal(15, 0)
   status             String             @db.VarChar(50)
   location_id        Int?
   province           province?          @relation(fields: [location_id], references: [province_id], onDelete: NoAction, onUpdate: NoAction)
-  product            product            @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+  batchitem          batchitem[]
   deliverynoteline   deliverynoteline[]
   grnline            grnline[]
   stockmovement      stockmovement[]
+}
+
+model batchitem {
+  item_id            Int     @id @default(autoincrement())
+  batch_id           Int
+  product_id         String  @db.Uuid
+  received_quantity  Decimal @db.Decimal(15, 0)
+  available_quantity Decimal @db.Decimal(15, 0)
+  batch              batch   @relation(fields: [batch_id], references: [batch_id], onDelete: Cascade, onUpdate: NoAction)
+  product            product @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model customerinvoice {
@@ -83,6 +90,9 @@ model deliverynote {
   delv_date        DateTime           @db.Date
   delivered_by     String?            @db.VarChar(100)
   status           String?            @db.VarChar(50)
+  discount         String?            @db.VarChar(10)
+  transportcharges String?            @db.VarChar(10)
+  nettotal         String?            @db.VarChar(10)
   salesorder       salesorder?        @relation(fields: [so_id], references: [so_id], onDelete: NoAction, onUpdate: NoAction)
   deliverynoteline deliverynoteline[]
 }
@@ -119,14 +129,17 @@ model glaccount {
 }
 
 model grn {
-  grn_id        Int            @id @default(autoincrement())
-  grn_number    String?        @unique @db.VarChar(50)
-  po_id         Int?
-  received_date DateTime       @db.Date
-  received_by   String?        @db.VarChar(100)
-  status        String?        @db.VarChar(50)
-  purchaseorder purchaseorder? @relation(fields: [po_id], references: [po_id], onDelete: NoAction, onUpdate: NoAction)
-  grnline       grnline[]
+  grn_id           Int            @id @default(autoincrement())
+  grn_number       String?        @unique @db.VarChar(50)
+  po_id            Int?
+  received_date    DateTime       @db.Date
+  received_by      String?        @db.VarChar(100)
+  status           String?        @db.VarChar(50)
+  discount         String?        @db.VarChar(10)
+  transportcharges String?        @db.VarChar(10)
+  nettotal         String?        @db.VarChar(10)
+  purchaseorder    purchaseorder? @relation(fields: [po_id], references: [po_id], onDelete: NoAction, onUpdate: NoAction)
+  grnline          grnline[]
 }
 
 model grnline {
@@ -227,7 +240,7 @@ model product {
   uom_id              Int
   hsn_code            String?               @db.VarChar(50)
   brand               String?               @db.VarChar(100)
-  batch               batch[]
+  batchitem           batchitem[]
   customerinvoiceline customerinvoiceline[]
   deliverynoteline    deliverynoteline[]
   grnline             grnline[]
@@ -242,14 +255,14 @@ model product {
 }
 
 model productcategory {
-  product_category_id Int       @id
+  product_category_id Int       @id @default(autoincrement())
   category            String?   @db.VarChar(50)
   description         String?
   product             product[]
 }
 
 model productprice {
-  prod_price_id  Int             @id
+  prod_price_id  Int             @id @default(autoincrement())
   product_id     String          @db.Uuid
   price_type     price_type_enum
   currency       String?         @db.VarChar(10)
@@ -267,6 +280,15 @@ model province {
   province_id Int         @id
   name        String?     @db.VarChar(100)
   batch       batch[]
+  warehouse   warehouse[]
+  district    district[]
+}
+
+model district {
+  district_id Int         @id @default(autoincrement())
+  name        String      @db.VarChar(100)
+  province_id Int
+  province    province    @relation(fields: [province_id], references: [province_id], onDelete: NoAction, onUpdate: NoAction)
   warehouse   warehouse[]
 }
 
@@ -393,7 +415,7 @@ model supplierinvoiceline {
 }
 
 model tax {
-  tax_id              Int                   @id
+  tax_id              Int                   @id @default(autoincrement())
   name                String                @db.VarChar(255)
   rate                Decimal?              @db.Decimal(5, 4)
   type                String                @db.VarChar(50)
@@ -426,11 +448,13 @@ model warehouse {
   warehouse_id                                             Int             @id @default(autoincrement())
   name                                                     String?         @db.VarChar(50)
   location                                                 Int?
+  district_id                                              Int?
   type                                                     String?         @db.VarChar(50)
   stockitem                                                stockitem[]
   stockmovement_stockmovement_warehouse_from_idTowarehouse stockmovement[] @relation("stockmovement_warehouse_from_idTowarehouse")
   stockmovement_stockmovement_warehouse_to_idTowarehouse   stockmovement[] @relation("stockmovement_warehouse_to_idTowarehouse")
   province                                                 province?       @relation(fields: [location], references: [province_id], onDelete: NoAction, onUpdate: NoAction)
+  district                                                 district?       @relation(fields: [district_id], references: [district_id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model user {

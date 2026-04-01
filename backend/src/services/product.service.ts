@@ -4,44 +4,42 @@ import { v4 as uuidv4 } from 'uuid'; // UUID generate karne ke liye
 export class ProductService {
   // 1. Create Product
   static async createProduct(data: any) {
-  // Batch find karne ka logic
-  const batchc = await prisma.batch.findFirst({
-    where: {
-      batch_number: data.batch_number
-    }
-  });
+    // Batch find karne ka logic
+    const batchc = await prisma.batch.findFirst({
+      where: {
+        batch_number: data.batch_number
+      }
+    });
 
-  // Product ID generate karna agar nahi hai
-  const finalProductId = data.productId || uuidv4();
+    // Product ID generate karna agar nahi hai
+    const finalProductId = data.productId || uuidv4();
 
-  return await prisma.product.create({
-    data: {
-      product_id: finalProductId,
-      sku_code: data.sku,
-      name: data.name,
-      description: data.description,
-      product_cat_id: data.category_id ? parseInt(data.category_id) : null,
-      uom_id: parseInt(data.unit_id),
-      hsn_code: data.hsn_code,
-      brand: data.brand_name,
-      
-      // Batch connection
-      batch: batchc ? { connect: { batch_id: batchc.batch_id } } : undefined,
+    return await prisma.product.create({
+      data: {
+        product_id: finalProductId,
+        sku_code: data.sku,
+        name: data.name,
+        description: data.description,
+        product_cat_id: data.category_id ? parseInt(data.category_id) : null,
+        uom_id: parseInt(data.unit_id),
+        hsn_code: data.hsn_code,
+        brand: data.brand_name,
 
-      // Nested Product Price Creation
-      productprice: {
-        create: {
-          prod_price_id: Math.floor(Math.random() * 1000000), // Agar @default(autoincrement) nahi hai schema mein
-          price_type: 'RETAIL', // Aap price_type_enum use kar rahe hain
-          unit_price: data.product_price,
-          currency: 'PKR',
-          uom_id: parseInt(data.unit_id),
-          effective_from: new Date(), // Current date
-          // effective_to property optional hai schema ke mutabiq
+        // Nested Product Price Creation
+        productprice: {
+          create: [
+            {
+              price_type: 'RETAIL',
+              unit_price: data.product_price,
+              currency: 'PKR',
+              uom_id: parseInt(data.unit_id),
+              effective_from: new Date(),
+            } as any
+          ]
         }
       }
-    }
-  });}
+    });
+  }
 
   // 2. Get All Products with Details
   static async getAllProducts() {
@@ -67,9 +65,9 @@ export class ProductService {
         uom: true,
         productcategory: true,
         productprice: {
-          where: { effective_to: null } 
+          where: { effective_to: null }
         },
-        batch: true
+        batchitem: { include: { batch: true } }
       }
     });
   }
@@ -86,7 +84,7 @@ export class ProductService {
           productprice: {
             where: { effective_to: null }
           },
-          batch:true
+          batchitem: { include: { batch: true } }
         }
       }
     )
@@ -147,9 +145,10 @@ export class ProductService {
 
   // 5. Delete Product (Check logic included)
   static async deleteProduct(id: string) {
-    // Note: Transaction tables mein data hone par Prisma error dega (due to NoAction)
-    return await prisma.product.delete({
-      where: { product_id: id }
+    return await prisma.$transaction(async (tx) => {
+      // Delete productprice first (NoAction FK)
+      await tx.productprice.deleteMany({ where: { product_id: id } });
+      return await tx.product.delete({ where: { product_id: id } });
     });
   }
 }

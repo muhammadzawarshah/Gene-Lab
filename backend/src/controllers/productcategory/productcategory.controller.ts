@@ -56,7 +56,7 @@ export class productcategorycontroller {
                 message:"The category has been updated"
             })
         } catch (error) {
-            
+            res.status(500).send("There will be" + error);
         }
     }
 

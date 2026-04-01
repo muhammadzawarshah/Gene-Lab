@@ -50,5 +50,8 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
-  "keywords": []
+  "keywords": [],
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
 }
