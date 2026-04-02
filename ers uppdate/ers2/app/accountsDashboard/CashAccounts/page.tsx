@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,6 +34,13 @@ export default function AccountBalances() {
 
   // --- Security Config ---
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const token = Cookies.get('auth_token');
+  const userId = Cookies.get('userId') || Cookies.get('user_id');
+
+  const secureApi = useMemo(() => axios.create({
+    baseURL: API_URL,
+    headers: { 'Authorization': `Bearer ${token}` }
+  }), [API_URL, token]);
 
   // --- Fetch Accounts ---
   const fetchAccounts = async () => {

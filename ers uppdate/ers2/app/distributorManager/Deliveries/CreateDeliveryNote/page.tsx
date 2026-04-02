@@ -183,7 +183,7 @@ export default function FullSaleOrderManagement() {
 
       // Fetch initial batches for all products
       productsWithBatches.forEach((p: any, idx: number) => {
-        fetchBatchesForProduct(idx, p.productName);
+        fetchBatchesForProduct(idx);
       });
 
     } catch (err) {
@@ -211,7 +211,7 @@ export default function FullSaleOrderManagement() {
 
     // Agar product name change hua to naye batches layein
     if (field === 'productName') {
-      fetchBatchesForProduct(index, value);
+      fetchBatchesForProduct(index);
     }
   };
 
@@ -382,11 +382,11 @@ const grandTotal = (lineItemsTotal - discountAmount) + transport;
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <label className={labelClass}>Discount (PKR)</label>
-                            <div className="relative"><Tag className="absolute left-4 top-3.5 text-rose-500" size={16} /><input type="number" className={`${inputStyle} pl-12 text-rose-400 font-bold`} value={formData.discount} onChange={(e) => setFormData({...formData, discount: e.target.value})} /></div>
+                            <div className="relative"><Tag className="absolute left-4 top-3.5 text-rose-500" size={16} /><input type="number" className={`${inputStyle} pl-12 text-rose-400 font-bold`} value={formData.discount} onChange={(e) => setFormData({...formData, discount: Number(e.target.value)})} /></div>
                         </div>
                         <div className="space-y-2">
                             <label className={labelClass}>Transport (PKR)</label>
-                            <div className="relative"><Truck className="absolute left-4 top-3.5 text-blue-500" size={16} /><input type="number" className={`${inputStyle} pl-12 text-blue-400 font-bold`} value={formData.transportCharges} onChange={(e) => setFormData({...formData, transportCharges: e.target.value})} /></div>
+                            <div className="relative"><Truck className="absolute left-4 top-3.5 text-blue-500" size={16} /><input type="number" className={`${inputStyle} pl-12 text-blue-400 font-bold`} value={formData.transportCharges} onChange={(e) => setFormData({...formData, transportCharges: Number(e.target.value)})} /></div>
                         </div>
                     </div>
                     <textarea rows={3} className="w-full bg-[#0f172a] border border-slate-800 rounded-[2rem] p-6 text-sm outline-none focus:border-emerald-500" placeholder="Dispatch instructions..." value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} />

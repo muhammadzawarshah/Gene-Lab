@@ -180,7 +180,7 @@ export default function InventoryTransferPro() {
 
     setRows(prev => {
       const updatedRows = [...prev];
-      const row = { ...updatedRows[index] };
+      const row = { ...updatedRows[index] } as any;
 
       row[field] = value;
 
@@ -208,7 +208,7 @@ export default function InventoryTransferPro() {
 
       if (field === "batch_no") {
         const selected = row.batchOptions.find(
-          b => b.batch_number === value
+          (b: Batch) => b.batch_number === value
         );
 
         if (selected) {

@@ -18,12 +18,13 @@ type PaymentMethod = 'Bank Transfer' | 'Digital Wallet' | 'Direct Deposit';
 type PaymentStatus = 'Verified' | 'Processing' | 'Flagged';
 
 interface Payment {
-  id: string;
+  payment_id: string;
   invoiceRef: string;
   date: string;
   amount: string;
   method: PaymentMethod;
   status: PaymentStatus;
+  reference_number: string;
   txnHash: string;
 }
 
@@ -187,7 +188,7 @@ export default function PaymentsPage() {
                 const config = statusConfig[pay.status] || statusConfig['Processing'];
                 return (
                   <motion.div
-                    key={pay.id}
+                    key={pay.payment_id}
                     layout
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}

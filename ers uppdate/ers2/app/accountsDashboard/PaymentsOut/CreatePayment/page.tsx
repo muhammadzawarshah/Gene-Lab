@@ -189,7 +189,7 @@ export default function CreatePayment() {
                   </thead>
                   <tbody>
                      {/* Yahan customerinvoiceline map ho raha hai */}
-                     {(invoiceData.customerinvoiceline || []).map((line, idx) => (
+                     {(invoiceData.customerinvoiceline || []).map((line: any, idx: number) => (
                       <tr key={idx} className="border-b border-white/[0.02]">
                         <td className="p-4">
                           <p className="text-[9px] font-black text-slate-500 uppercase">
