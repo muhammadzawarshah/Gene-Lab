@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
+import helmet from '../node_modules/helmet/index.cjs';
 import v1Router from './Routes/index.js';
 import { globalErrorHandler } from './middlewares/error.middleware.js';
 
