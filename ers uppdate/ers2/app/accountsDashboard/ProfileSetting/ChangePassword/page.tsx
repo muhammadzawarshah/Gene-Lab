@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,28 +26,39 @@ export default function ChangePassword() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  // --- Password Strength Logic ---
-  const getStrength = () => {
+  // --- Password Validation Logic ---
+  const isValidPassword = useCallback(() => {
+    const pw = formData.new;
+    if (pw.length < 8) return false;
+    if (!/[A-Z]/.test(pw)) return false;
+    if (!/[a-z]/.test(pw)) return false;
+    if (!/[0-9]/.test(pw)) return false;
+    if (!/[^A-Za-z0-9]/.test(pw)) return false;
+    return true;
+  }, [formData.new]);
+
+  const getStrengthMeter = useCallback(() => {
     if (formData.new.length === 0) return 0;
     let strength = 0;
-    if (formData.new.length > 8) strength += 1;
-    if (/[A-Z]/.test(formData.new)) strength += 1;
+    if (formData.new.length >= 8) strength += 1;
+    if (/[A-Z]/.test(formData.new) && /[a-z]/.test(formData.new)) strength += 1;
     if (/[0-9]/.test(formData.new)) strength += 1;
     if (/[^A-Za-z0-9]/.test(formData.new)) strength += 1;
     return strength;
-  };
+  }, [formData.new]);
 
-  const strength = getStrength();
+  const strength = getStrengthMeter();
+  const isValid = isValidPassword();
 
-  // --- Handle Update ---
+  // --- Secure Submission ---
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (formData.new !== formData.confirm) {
-      return toast.error("VALIDATION ERROR", { description: "New passwords do not match." });
+      return toast.error("VALIDATION ERROR", { description: "New access keys do not match." });
     }
-    if (strength < 3) {
-      return toast.warning("WEAK PASSWORD", { description: "Password complexity is too low." });
+    if (!isValid) {
+      return toast.warning("SECURITY RISK", { description: "Password must be at least 8 chars with uppercase, lowercase, number, and special character." });
     }
 
     const token = Cookies.get('auth_token');
@@ -155,27 +166,20 @@ export default function ChangePassword() {
             </div>
 
             {/* Strength Meter */}
-            <div className="flex gap-2 mt-4 px-1">
+            <div className="flex gap-1.5 mt-3 px-1">
               {[1, 2, 3, 4].map((step) => (
-                <div
-                  key={step}
+                <div 
+                  key={step} 
                   className={cn(
-                    "h-1.5 flex-1 rounded-full transition-all duration-700",
-                    strength >= step ? (strength <= 2 ? "bg-rose-500" : strength === 3 ? "bg-amber-500" : "bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)]") : "bg-white/5"
-                  )}
+                    "h-1 flex-1 rounded-full transition-all duration-500",
+                    strength >= step ? (strength <= 2 ? "bg-rose-500" : strength === 3 ? "bg-amber-500" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]") : "bg-white/5"
+                  )} 
                 />
               ))}
             </div>
-            <div className="flex justify-between items-center mt-3">
-              <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-2 italic">
-                 <Activity size={12} className="text-blue-500" /> Strength:
-                 <span className={cn(
-                   strength <= 2 ? "text-rose-500" : strength === 3 ? "text-amber-500" : "text-emerald-500"
-                 )}>
-                   {strength === 0 ? 'Not set' : strength <= 2 ? 'Weak' : strength === 3 ? 'Medium' : 'Strong'}
-                 </span>
-              </p>
-            </div>
+            <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest mt-2 flex flex-col gap-1 italic">
+               <span className="flex items-center gap-2"><Activity size={10} /> Requirements: 8+ chars, Upper, Lower, Num, Special</span>
+            </p>
           </div>
 
           {/* Confirm Password */}
@@ -201,7 +205,7 @@ export default function ChangePassword() {
 
           <button
             type="submit"
-            disabled={isLoading || strength < 3 || formData.new !== formData.confirm}
+            disabled={isLoading || !isValid || formData.new !== formData.confirm}
             className="w-full relative group mt-10 overflow-hidden rounded-[1.5rem] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-400 group-hover:scale-105 transition-transform duration-500" />

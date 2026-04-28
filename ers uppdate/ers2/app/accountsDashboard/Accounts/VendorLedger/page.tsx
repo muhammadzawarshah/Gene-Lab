@@ -1,23 +1,39 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
-import axios from 'axios';
-import Cookies from 'js-cookie';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster, toast } from 'sonner';
-import { 
-  Search, Truck, Download, Printer, 
-  ArrowUpRight, Landmark, BookOpen, MessageSquare, 
-  Loader2, ShieldAlert, ShieldCheck, Lock
-} from 'lucide-react';
+import React, { useState, useMemo, useEffect } from "react";
+import axios from "axios";
+import Cookies from "js-cookie";
+import { motion, AnimatePresence } from "framer-motion";
+import { Toaster, toast } from "sonner";
+import {
+  Search,
+  Truck,
+  Download,
+  Printer,
+  ArrowUpRight,
+  Landmark,
+  MessageSquare,
+  Loader2,
+  ShieldAlert,
+  ShieldCheck,
+  Lock,
+  FileText,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  LedgerStatementSheet,
+  type LedgerStatementEntry,
+  type LedgerStatementSummaryItem,
+} from "@/components/layout/LedgerStatementSheet";
+import { LedgerStatementModal } from "@/components/layout/LedgerStatementModal";
+import { exportLedgerStatementPdf } from "@/lib/ledgerPdf";
+import { printElementById } from "@/lib/printElement";
 
-// --- Types ---
 interface VendorEntry {
   id: string;
   invoice_ref: string | null;
   date: string;
-  type: 'Purchase' | 'Payment' | 'Return';
+  type: "Purchase" | "Payment" | "Return";
   description: string;
   debit: number;
   credit: number;
@@ -33,40 +49,51 @@ interface Vendor {
   lastPurchase: string;
 }
 
+const formatStatementDate = (dateStr?: string) => {
+  if (!dateStr) return new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return dateStr;
+  return parsed.toLocaleDateString("en-GB").replace(/\//g, "-");
+};
+
+const formatCurrency = (value: number) =>
+  `PKR ${Math.abs(Number(value || 0)).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
 export default function VendorLedger() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [ledgerData, setLedgerData] = useState<Record<string, VendorEntry[]>>({});
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  // --- Security & Auth Config ---
-  const API_KEY = process.env.NEXT_PUBLIC_API_KEY; // Managed via Axios Headers
+  const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const currentUserId = Cookies.get('userId') || Cookies.get('user_id');
-  const token = Cookies.get('auth_token');
+  const currentUserId = Cookies.get("userId") || Cookies.get("user_id");
+  const token = Cookies.get("auth_token");
 
-  // Secure Axios Instance
   const secureApi = axios.create({
     baseURL: API_URL,
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'x-api-key': API_KEY,
-      'x-user-id': currentUserId
-    }
+      Authorization: `Bearer ${token}`,
+      "x-api-key": API_KEY,
+      "x-user-id": currentUserId,
+    },
   });
 
-  // --- Fetch Initial Vendors ---
   useEffect(() => {
     const fetchVendors = async () => {
       setIsLoading(true);
       try {
         if (!currentUserId || !token) throw new Error("AUTH_INVALID");
-        const response = await secureApi.get(`/api/v1/finance/parties/summary/SUPPLIER`);
+        const response = await secureApi.get("/api/v1/finance/parties/summary/SUPPLIER");
         setVendors(response.data);
-      } catch (err) {
-        toast.error("SECURITY ALERT", { 
-          description: "Unauthorized access detected or session expired." 
+      } catch {
+        toast.error("SECURITY ALERT", {
+          description: "Unauthorized access detected or session expired.",
         });
       } finally {
         setIsLoading(false);
@@ -75,129 +102,204 @@ export default function VendorLedger() {
     fetchVendors();
   }, []);
 
-  // --- Fetch Ledger for Specific Vendor ---
   useEffect(() => {
     if (selectedVendor && !ledgerData[selectedVendor.id]) {
       const fetchDetails = async () => {
         try {
-          // Security: Regex to ensure ID is strictly alphanumeric (Prevents SQL Injection)
           const safeId = selectedVendor.id.replace(/[^a-zA-Z0-9-]/g, "");
           const response = await secureApi.get(`/api/v1/finance/parties/ledger/${safeId}`);
-          setLedgerData(prev => ({ ...prev, [selectedVendor.id]: response.data }));
-        } catch (err) {
-          toast.error("DATA LOCK", { description: "Failed to retrieve encrypted ledger." });
+          setLedgerData((prev) => ({ ...prev, [selectedVendor.id]: response.data }));
+        } catch {
+          toast.error("DATA LOCK", {
+            description: "Failed to retrieve encrypted ledger.",
+          });
         }
       };
       fetchDetails();
     }
   }, [selectedVendor]);
 
-  // --- Functions ---
   const handleExportCSV = (vendor: Vendor) => {
     const entries = ledgerData[vendor.id] || [];
     const csvHeader = "Date,Description,Type,Debit(Paid),Credit(Due),Balance\n";
-    
-    // Prevent Excel/CSV Injection (Sanitizing start characters =, +, -, @)
-    const csvRows = entries.map(e => {
-      const safeDesc = e.description.replace(/^[=+\-@]/, "'");
-      return `${e.date},${safeDesc},${e.type},${e.debit},${e.credit},${e.balance}`;
-    }).join("\n");
+    const csvRows = entries
+      .map((entry) => {
+        const safeDesc = entry.description.replace(/^[=+\-@]/, "'");
+        return `${entry.date},${safeDesc},${entry.type},${entry.debit},${entry.credit},${entry.balance}`;
+      })
+      .join("\n");
 
-    const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+    const blob = new Blob([csvHeader + csvRows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `SECURE_LEDGER_${vendor.company.replace(/\s+/g, '_')}.csv`;
+    link.download = `SECURE_LEDGER_${vendor.company.replace(/\s+/g, "_")}.csv`;
     link.click();
-    toast.success("VERIFIED EXPORT", { description: "CSV Statement generated successfully." });
+    toast.success("VERIFIED EXPORT", {
+      description: "CSV Statement generated successfully.",
+    });
+  };
+
+  const filteredVendors = useMemo(() => {
+    const safeSearch = search.toLowerCase().replace(/[${};"']/g, "");
+    return vendors.filter(
+      (vendor) =>
+        vendor.name.toLowerCase().includes(safeSearch) ||
+        vendor.company.toLowerCase().includes(safeSearch)
+    );
+  }, [search, vendors]);
+
+  const buildStatementData = (vendor: Vendor) => {
+    const entries = ledgerData[vendor.id] || [];
+    const statementEntries: LedgerStatementEntry[] = entries.map((entry) => ({
+      id: entry.id,
+      reference: entry.invoice_ref || entry.id,
+      date: entry.date,
+      type: entry.type,
+      description: entry.description,
+      debit: Number(entry.debit || 0),
+      credit: Number(entry.credit || 0),
+      balance: Number(entry.balance || 0),
+    }));
+
+    const totalDebit = statementEntries.reduce((sum, entry) => sum + entry.debit, 0);
+    const totalCredit = statementEntries.reduce((sum, entry) => sum + entry.credit, 0);
+    const closingBalance =
+      statementEntries[statementEntries.length - 1]?.balance ?? Number(vendor.totalDue || 0);
+
+    const summaryItems: LedgerStatementSummaryItem[] = [
+      { label: "Statement Type", value: "Supplier Ledger" },
+      { label: "Total Entries", value: String(statementEntries.length) },
+      { label: "Total Paid", value: formatCurrency(totalDebit) },
+      { label: "Total Due", value: formatCurrency(totalCredit) },
+      { label: "Net Liability", value: formatCurrency(closingBalance) },
+    ];
+
+    return {
+      fileName: `Supplier_Ledger_${vendor.company.replace(/\s+/g, "_")}.pdf`,
+      title: "Supplier Ledger Statement",
+      documentLabel: "Ledger Statement",
+      documentNumber: `VL-${vendor.id}`,
+      documentDate: formatStatementDate(statementEntries[statementEntries.length - 1]?.date),
+      partyLabel: "Vendor / Supplier",
+      partyName: vendor.company,
+      partyDetails: [
+        vendor.name ? `Contact: ${vendor.name}` : "",
+        vendor.phone ? `Phone: ${vendor.phone}` : "",
+        vendor.lastPurchase ? `Last Purchase: ${vendor.lastPurchase}` : "",
+      ].filter(Boolean),
+      summaryItems,
+      entries: statementEntries,
+      footerNote:
+        "Supplier ledger statement generated from the accountant dashboard. Preview, PDF aur print teeno ka layout same rakha gaya hai.",
+      signatureLabel: "Accountant Signature",
+    };
+  };
+
+  const handleDownloadPdf = (vendor: Vendor) => {
+    exportLedgerStatementPdf(buildStatementData(vendor));
+    toast.success("PDF READY", {
+      description: "Supplier ledger PDF generated successfully.",
+    });
+  };
+
+  const handlePrintStatement = () => {
+    printElementById("vendor-ledger-statement-print-area", "Supplier Ledger Statement");
   };
 
   const handleWhatsAppUpdate = (vendor: Vendor) => {
     const text = `Verified Statement: Assalam-o-Alaikum ${vendor.name}, our outstanding balance for ${vendor.company} is PKR ${vendor.totalDue.toLocaleString()}. Please verify records.`;
-    window.open(`https://wa.me/${vendor.phone}?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/${vendor.phone}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  // Security: Sanitizing search input before filtering
-  const filteredVendors = useMemo(() => {
-    const safeSearch = search.toLowerCase().replace(/[${};"']/g, ""); 
-    return vendors.filter(v => 
-      v.name.toLowerCase().includes(safeSearch) || 
-      v.company.toLowerCase().includes(safeSearch)
-    );
-  }, [search, vendors]);
+  const selectedStatement = selectedVendor ? buildStatementData(selectedVendor) : null;
 
   return (
-    <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans relative overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden p-4 font-sans text-slate-300 md:p-10">
       <Toaster position="top-right" theme="dark" richColors />
-      
-      {/* SECURITY WATERMARK (Subtle) */}
-      <div className="absolute top-5 right-10 flex items-center gap-2 opacity-20 pointer-events-none">
+
+      <div className="pointer-events-none absolute right-10 top-5 flex items-center gap-2 opacity-20">
         <ShieldCheck size={14} className="text-amber-500" />
-        <span className="text-[8px] font-black uppercase tracking-widest">Nexus Security Protocol Active</span>
+        <span className="text-[8px] font-black uppercase tracking-widest">
+          Nexus Security Protocol Active
+        </span>
       </div>
 
-      {/* HEADER */}
-      <div className="max-w-7xl mx-auto mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div className="mx-auto mb-12 flex max-w-7xl flex-col items-start justify-between gap-6 md:flex-row md:items-center">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase">
+          <h1 className="text-5xl font-black uppercase tracking-tighter text-white italic">
             Supplier <span className="text-amber-500">Ledger</span>
           </h1>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-2 italic flex items-center gap-2">
+          <p className="mt-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.4em] text-slate-500 italic">
             <Lock size={10} className="text-amber-500" /> Secure Accounts Payable Console
           </p>
         </motion.div>
-        
-        <div className="relative w-full md:w-96 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-amber-500 transition-colors" size={18} />
-          <input 
-            type="text" 
-            placeholder="VALIDATE SUPPLIER HASH..." 
-            className="w-full bg-[#050b1d] border border-white/5 rounded-2xl py-5 pl-12 pr-4 text-[10px] font-black uppercase tracking-widest text-white outline-none focus:border-amber-500 transition-all shadow-2xl"
+
+        <div className="group relative w-full md:w-96">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 transition-colors group-focus-within:text-amber-500"
+            size={18}
+          />
+          <input
+            type="text"
+            placeholder="VALIDATE SUPPLIER HASH..."
+            className="w-full rounded-2xl border border-white/5 bg-[#050b1d] py-5 pl-12 pr-4 text-[10px] font-black uppercase tracking-widest text-white shadow-2xl outline-none transition-all focus:border-amber-500"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
           />
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* VENDOR LIST (LEFT) */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="flex items-center justify-between px-2 mb-2">
-            <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Authenticated Entities</h2>
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="space-y-4 lg:col-span-4">
+          <div className="mb-2 flex items-center justify-between px-2">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              Authenticated Entities
+            </h2>
             {isLoading && <Loader2 size={14} className="animate-spin text-amber-500" />}
           </div>
 
-          <div className="h-[calc(100vh-300px)] overflow-y-auto pr-2 custom-scrollbar space-y-4">
-            {filteredVendors.map(vendor => (
-              <motion.div 
+          <div className="custom-scrollbar h-[calc(100vh-300px)] space-y-4 overflow-y-auto pr-2">
+            {filteredVendors.map((vendor) => (
+              <motion.div
                 key={vendor.id}
                 onClick={() => setSelectedVendor(vendor)}
                 whileHover={{ x: 5, backgroundColor: "rgba(251, 191, 36, 0.05)" }}
                 className={cn(
-                  "p-8 rounded-[2.5rem] border cursor-pointer transition-all flex items-center justify-between group overflow-hidden relative",
-                  selectedVendor?.id === vendor.id 
-                    ? "bg-amber-500 border-amber-400 text-black shadow-2xl shadow-amber-500/20" 
-                    : "bg-[#050b1d] border-white/5 hover:border-white/10"
+                  "group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-[2.5rem] border p-8 transition-all",
+                  selectedVendor?.id === vendor.id
+                    ? "border-amber-400 bg-amber-500 text-black shadow-2xl shadow-amber-500/20"
+                    : "border-white/5 bg-[#050b1d] hover:border-white/10"
                 )}
               >
                 <div className="flex items-center gap-5">
-                  <div className={cn(
-                    "w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner transition-colors",
-                    selectedVendor?.id === vendor.id ? "bg-black/10" : "bg-white/5"
-                  )}>
+                  <div
+                    className={cn(
+                      "flex h-14 w-14 items-center justify-center rounded-2xl shadow-inner transition-colors",
+                      selectedVendor?.id === vendor.id ? "bg-black/10" : "bg-white/5"
+                    )}
+                  >
                     <Truck size={22} />
                   </div>
                   <div>
-                    <h3 className="text-base font-black uppercase italic tracking-tighter">{vendor.company}</h3>
-                    <p className={cn("text-[10px] font-black mt-1", selectedVendor?.id === vendor.id ? "text-amber-900" : "text-slate-600")}>
+                    <h3 className="text-base font-black uppercase tracking-tighter italic">
+                      {vendor.company}
+                    </h3>
+                    <p
+                      className={cn(
+                        "mt-1 text-[10px] font-black",
+                        selectedVendor?.id === vendor.id ? "text-amber-900" : "text-slate-600"
+                      )}
+                    >
                       PAYABLE: PKR {vendor.totalDue.toLocaleString()}
                     </p>
                   </div>
                 </div>
                 {vendor.totalDue > 500000 && selectedVendor?.id !== vendor.id && (
-                  <div className="absolute top-0 right-10">
-                    <span className="bg-rose-500/20 text-rose-500 text-[8px] font-black px-3 py-1 rounded-b-lg border-b border-rose-500/50">HIGH RISK</span>
+                  <div className="absolute right-10 top-0">
+                    <span className="rounded-b-lg border-b border-rose-500/50 bg-rose-500/20 px-3 py-1 text-[8px] font-black text-rose-500">
+                      HIGH RISK
+                    </span>
                   </div>
                 )}
               </motion.div>
@@ -205,48 +307,68 @@ export default function VendorLedger() {
           </div>
         </div>
 
-        {/* LEDGER DETAILS (RIGHT) */}
         <div className="lg:col-span-8">
           <AnimatePresence mode="wait">
             {selectedVendor ? (
-              <motion.div 
+              <motion.div
                 key={selectedVendor.id}
-                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-                className="bg-[#050b1d] border border-white/5 rounded-[4rem] overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] flex flex-col h-full"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex h-full flex-col overflow-hidden rounded-[4rem] border border-white/5 bg-[#050b1d] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)]"
               >
-                {/* ACCOUNT SUMMARY */}
-                <div className="p-10 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 bg-gradient-to-b from-white/[0.02] to-transparent">
+                <div className="flex flex-col items-center justify-between gap-6 border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-10 md:flex-row">
                   <div className="flex items-center gap-8">
-                    <div className="w-20 h-20 bg-amber-500/10 rounded-[2rem] flex items-center justify-center text-amber-500 border border-amber-500/20 shadow-inner">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-[2rem] border border-amber-500/20 bg-amber-500/10 text-amber-500 shadow-inner">
                       <Landmark size={36} />
                     </div>
                     <div>
-                      <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">{selectedVendor.company}</h2>
-                      <div className="flex items-center gap-4 mt-2">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1 rounded-full border border-white/5">SUPPLIER: {selectedVendor.id}</span>
-                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{selectedVendor.phone}</span>
+                      <h2 className="text-3xl font-black uppercase tracking-tighter text-white italic">
+                        {selectedVendor.company}
+                      </h2>
+                      <div className="mt-2 flex items-center gap-4">
+                        <span className="rounded-full border border-white/5 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                          SUPPLIER: {selectedVendor.id}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">
+                          {selectedVendor.phone}
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button onClick={() => handleWhatsAppUpdate(selectedVendor)} className="p-5 bg-emerald-500/10 text-emerald-500 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all shadow-xl">
+                    <button
+                      onClick={() => handleWhatsAppUpdate(selectedVendor)}
+                      className="rounded-2xl bg-emerald-500/10 p-5 text-emerald-500 shadow-xl transition-all hover:bg-emerald-500 hover:text-white"
+                    >
                       <MessageSquare size={20} />
                     </button>
-                    <button onClick={() => handleExportCSV(selectedVendor)} className="p-5 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 hover:text-white transition-all border border-white/5">
+                    <button
+                      onClick={() => setIsPreviewOpen(true)}
+                      className="rounded-2xl border border-white/5 bg-white/5 p-5 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                    >
+                      <FileText size={20} />
+                    </button>
+                    <button
+                      onClick={() => handleDownloadPdf(selectedVendor)}
+                      className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-amber-400 transition-all hover:bg-amber-500 hover:text-[#020617]"
+                    >
                       <Download size={20} />
                     </button>
-                    <button onClick={() => window.print()} className="p-5 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 hover:text-white transition-all border border-white/5">
+                    <button
+                      onClick={handlePrintStatement}
+                      className="rounded-2xl border border-white/5 bg-white/5 p-5 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                    >
                       <Printer size={20} />
                     </button>
                   </div>
                 </div>
 
-                {/* LEDGER TABLE */}
-                <div className="p-8 flex-1 overflow-x-auto overflow-y-auto max-h-[500px] custom-scrollbar">
+                <div className="custom-scrollbar max-h-[500px] flex-1 overflow-x-auto overflow-y-auto p-8">
                   <table className="w-full text-left">
-                    <thead className="sticky top-0 bg-[#050b1d] z-10">
-                      <tr className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] border-b border-white/5">
-                        <th className="px-4 py-6 w-12">S.No</th>
+                    <thead className="sticky top-0 z-10 bg-[#050b1d]">
+                      <tr className="border-b border-white/5 text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">
+                        <th className="w-12 px-4 py-6">S.No</th>
                         <th className="px-4 py-6">Invoice No</th>
                         <th className="px-8 py-6">Timestamp</th>
                         <th className="px-8 py-6">Transaction Detail</th>
@@ -259,31 +381,42 @@ export default function VendorLedger() {
                       {!ledgerData[selectedVendor.id] ? (
                         <tr>
                           <td colSpan={7} className="py-24 text-center">
-                            <Loader2 className="animate-spin mx-auto text-amber-500 mb-4" size={32} />
-                            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">Verifying Blockchain Hashes...</p>
+                            <Loader2 className="mx-auto mb-4 animate-spin text-amber-500" size={32} />
+                            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">
+                              Verifying Blockchain Hashes...
+                            </p>
                           </td>
                         </tr>
                       ) : (
                         ledgerData[selectedVendor.id].map((entry, idx) => (
-                          <tr key={entry.id} className="hover:bg-white/[0.03] transition-colors group">
-                            <td className="px-4 py-8 text-[11px] font-black text-slate-600 text-center">{idx + 1}</td>
+                          <tr
+                            key={entry.id}
+                            className="group transition-colors hover:bg-white/[0.03]"
+                          >
+                            <td className="px-4 py-8 text-center text-[11px] font-black text-slate-600">
+                              {idx + 1}
+                            </td>
                             <td className="px-4 py-8">
-                              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">
-                                {entry.id || '—'}
+                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                                {entry.id || "—"}
                               </span>
                             </td>
-                            <td className="px-8 py-8 text-[11px] font-black text-slate-500 uppercase italic">{entry.date}</td>
-                            <td className="px-8 py-8">
-                              <p className="text-xs font-black text-slate-200 uppercase tracking-tight group-hover:text-amber-500 transition-colors">{entry.description}</p>
-                            </td>
-                            <td className="px-8 py-8 text-xs font-black text-emerald-500 italic">
-                              {entry.debit > 0 ? `PKR ${entry.debit.toLocaleString()}` : '—'}
-                            </td>
-                            <td className="px-8 py-8 text-xs font-black text-rose-500 italic">
-                              {entry.credit > 0 ? `PKR ${entry.credit.toLocaleString()}` : '—'}
+                            <td className="px-8 py-8 text-[11px] font-black uppercase italic text-slate-500">
+                              {entry.date}
                             </td>
                             <td className="px-8 py-8">
-                              <span className="text-xs font-black text-white px-5 py-2 bg-white/5 rounded-xl border border-white/5 tracking-tighter">
+                              <p className="text-xs font-black uppercase tracking-tight text-slate-200 transition-colors group-hover:text-amber-500">
+                                {entry.description}
+                              </p>
+                            </td>
+                            <td className="px-8 py-8 text-xs font-black italic text-emerald-500">
+                              {entry.debit > 0 ? `PKR ${entry.debit.toLocaleString()}` : "—"}
+                            </td>
+                            <td className="px-8 py-8 text-xs font-black italic text-rose-500">
+                              {entry.credit > 0 ? `PKR ${entry.credit.toLocaleString()}` : "—"}
+                            </td>
+                            <td className="px-8 py-8">
+                              <span className="rounded-xl border border-white/5 bg-white/5 px-5 py-2 text-xs font-black tracking-tighter text-white">
                                 PKR {entry.balance.toLocaleString()}
                               </span>
                             </td>
@@ -294,35 +427,87 @@ export default function VendorLedger() {
                   </table>
                 </div>
 
-                {/* FOOTER */}
-                <div className="p-10 bg-white/[0.01] border-t border-white/5 flex justify-between items-center">
+                <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.01] p-10">
                   <div className="flex items-center gap-4">
                     <ShieldAlert size={18} className="text-amber-500/50" />
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                      Total Outstanding: <span className="text-white ml-2 text-sm italic">PKR {selectedVendor.totalDue.toLocaleString()}</span>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Total Outstanding:{" "}
+                      <span className="ml-2 text-sm text-white italic">
+                        PKR {selectedVendor.totalDue.toLocaleString()}
+                      </span>
                     </p>
                   </div>
-                  <button className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-3 hover:gap-6 transition-all group">
-                    Full Procurement Audit <ArrowUpRight size={14} className="group-hover:text-white" />
+                  <button className="group flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-amber-500 transition-all hover:gap-6">
+                    Full Procurement Audit{" "}
+                    <ArrowUpRight size={14} className="group-hover:text-white" />
                   </button>
                 </div>
               </motion.div>
             ) : (
-              <div className="h-full min-h-[600px] border-2 border-dashed border-white/5 rounded-[4rem] flex flex-col items-center justify-center text-slate-700 bg-white/[0.01]">
+              <div className="flex h-full min-h-[600px] flex-col items-center justify-center rounded-[4rem] border-2 border-dashed border-white/5 bg-white/[0.01] text-slate-700">
                 <Truck size={80} className="mb-6 opacity-10" />
-                <h3 className="text-xl font-black uppercase italic tracking-tighter text-slate-600">Secure Vault Standby</h3>
-                <p className="text-[9px] font-bold uppercase tracking-[0.4em] mt-3">Select a supplier identity to decrypt procurement history</p>
+                <h3 className="text-xl font-black uppercase tracking-tighter text-slate-600 italic">
+                  Secure Vault Standby
+                </h3>
+                <p className="mt-3 text-[9px] font-bold uppercase tracking-[0.4em]">
+                  Select a supplier identity to decrypt procurement history
+                </p>
               </div>
             )}
           </AnimatePresence>
         </div>
       </div>
-      
-      {/* SYSTEM LOGS FOOTER */}
-      <div className="max-w-7xl mx-auto mt-10 flex justify-between items-center opacity-30 text-[8px] font-black uppercase tracking-[0.5em]">
+
+      <div className="mx-auto mt-10 flex max-w-7xl items-center justify-between text-[8px] font-black uppercase tracking-[0.5em] opacity-30">
         <p>User-Session: {currentUserId?.slice(0, 10)}...-Encrypted</p>
         <p>Nexus Ledger Protocol v4.0.2</p>
       </div>
+
+      {selectedStatement && (
+        <>
+          <div
+            id="vendor-ledger-statement-print-area"
+            className="pointer-events-none fixed -left-[200vw] top-0 w-[920px] opacity-0"
+            aria-hidden="true"
+          >
+            <LedgerStatementSheet
+              title={selectedStatement.title}
+              documentLabel={selectedStatement.documentLabel}
+              documentNumber={selectedStatement.documentNumber}
+              documentDate={selectedStatement.documentDate}
+              partyLabel={selectedStatement.partyLabel}
+              partyName={selectedStatement.partyName}
+              partyDetails={selectedStatement.partyDetails}
+              summaryItems={selectedStatement.summaryItems}
+              entries={selectedStatement.entries}
+              footerNote={selectedStatement.footerNote}
+              signatureLabel={selectedStatement.signatureLabel}
+            />
+          </div>
+
+          <LedgerStatementModal
+            isOpen={isPreviewOpen}
+            title={selectedStatement.title}
+            onClose={() => setIsPreviewOpen(false)}
+            onDownloadPdf={() => handleDownloadPdf(selectedVendor!)}
+            onPrint={handlePrintStatement}
+          >
+            <LedgerStatementSheet
+              title={selectedStatement.title}
+              documentLabel={selectedStatement.documentLabel}
+              documentNumber={selectedStatement.documentNumber}
+              documentDate={selectedStatement.documentDate}
+              partyLabel={selectedStatement.partyLabel}
+              partyName={selectedStatement.partyName}
+              partyDetails={selectedStatement.partyDetails}
+              summaryItems={selectedStatement.summaryItems}
+              entries={selectedStatement.entries}
+              footerNote={selectedStatement.footerNote}
+              signatureLabel={selectedStatement.signatureLabel}
+            />
+          </LedgerStatementModal>
+        </>
+      )}
     </div>
   );
 }

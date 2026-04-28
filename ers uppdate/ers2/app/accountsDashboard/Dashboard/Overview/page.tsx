@@ -69,7 +69,7 @@ export default function AccountsHome() {
         <Loader2 size={48} />
       </motion.div>
       <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-500 animate-pulse italic">
-        Syncing Nexus Financial Data...
+        Syncing Gene Financial Data...
       </p>
     </div>
   );
@@ -96,7 +96,7 @@ export default function AccountsHome() {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
         <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
           <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase">
-            Nexus <span className="text-blue-500">Finance</span>
+            Gene <span className="text-blue-500">Finance</span>
           </h1>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-2 italic">
             Command Center • ID: {(Cookies.get('userId') || Cookies.get('user_id'))?.slice(-6).toUpperCase()}

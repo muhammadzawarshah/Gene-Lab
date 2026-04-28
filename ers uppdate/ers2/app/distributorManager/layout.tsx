@@ -1,109 +1,246 @@
 "use client";
 
-import React, { useState, useEffect } from 'react'; // useLayoutEffect ki jagah useEffect behtar hai refresh handle karne ke liye
-import Sidebar from '@/components/layout/sidebar';
-import Navbar from '@/components/layout/navbar';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster } from 'sonner';
-import { Menu, Activity } from 'lucide-react'; 
-import { useRouter } from 'next/navigation';
-import { useAuth } from '../context/authcontext';
+import React, { useEffect, useState } from "react";
+import Sidebar from "@/components/layout/sidebar";
+import Navbar from "@/components/layout/navbar";
+import { motion, AnimatePresence } from "framer-motion";
+import { Toaster } from "sonner";
+import { Menu, Activity, Bell, CheckCheck, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../context/authcontext";
+import axios from "axios";
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
-  
-  // isLoading ko yahan context se nikalein
   const { token, isLoading } = useAuth();
 
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+
   useEffect(() => {
-    // Agar loading khatam ho chuki hai AUR token phir bhi nahi mila
     if (!isLoading && !token) {
-      router.replace('/login');
+      router.replace("/login");
     }
   }, [token, isLoading, router]);
 
-  // Jab tak AuthContext cookies check kar raha hai, loading screen dikhao
+  useEffect(() => {
+    if (!token) return;
+
+    const api = axios.create({
+      baseURL: process.env.NEXT_PUBLIC_API_URL,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const fetchNotifications = async () => {
+      try {
+        await api.post("/api/v1/notifications/sync-low-stock").catch(() => {});
+        const res = await api.get("/api/v1/notifications?limit=10");
+        const countRes = await api.get("/api/v1/notifications/unread-count");
+        setNotifications(res.data?.data || []);
+        setUnreadCount(countRes.data?.count || 0);
+      } catch (err) {
+        console.error("Notifications fetch failed:", err);
+      }
+    };
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  const handleMarkRead = async (id: number) => {
+    try {
+      const api = axios.create({
+        baseURL: process.env.NEXT_PUBLIC_API_URL,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await api.patch(`/api/v1/notifications/${id}/read`);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error("Mark read failed");
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      const api = axios.create({
+        baseURL: process.env.NEXT_PUBLIC_API_URL,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await api.patch(`/api/v1/notifications/read-all`);
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error("Mark all read failed");
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="h-screen w-full bg-[#020617] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-          <span className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">Verifying Session...</span>
+      <div className="app-shell flex h-screen items-center justify-center p-6">
+        <div className="app-panel-strong flex max-w-sm flex-col items-center rounded-[2.5rem] px-10 py-9 text-center">
+          <div className="mb-5 h-14 w-14 rounded-full border-4 border-blue-500/15 border-t-blue-500 animate-spin" />
+          <span className="text-[11px] font-black uppercase tracking-[0.35em] text-blue-500">
+            Verifying Session
+          </span>
+          <p className="mt-3 text-sm text-slate-500">
+            Secure workspace restore ho raha hai. Bas ek moment.
+          </p>
         </div>
       </div>
     );
   }
 
-  // Agar loading khatam ho gayi aur token mil gaya, tabhi content dikhao
   if (!token) return null;
 
   return (
-    <div className="flex h-screen bg-[#020617] overflow-hidden relative">
+    <div className="app-shell app-grid relative flex h-screen overflow-hidden">
       <Toaster theme="dark" position="top-right" richColors />
-      
-      <div className={`
-        fixed inset-y-0 left-0 z-[60] transform transition-transform duration-300 ease-in-out
-        md:relative md:translate-x-0 
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
-      `}>
+
+      <div
+        className={`fixed inset-y-0 left-0 z-[60] h-screen p-3 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:p-4 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+      >
         <Sidebar />
       </div>
 
       <AnimatePresence>
         {isSidebarOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[55] md:hidden"
+            className="fixed inset-0 z-[55] bg-slate-950/55 backdrop-blur-sm md:hidden"
           />
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col flex-1 relative overflow-hidden w-full">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="pointer-events-none absolute left-0 top-0 h-72 w-72 rounded-full bg-blue-500/10 blur-[120px]" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-[120px]" />
 
-        <div className="flex items-center bg-[#020617]/40 backdrop-blur-2xl border-b border-white/[0.05] sticky top-0 z-20">
-          <button 
+        <div className="relative z-50 flex items-center gap-3 px-3 pt-3 md:px-6 md:pt-6">
+          <button
             onClick={() => setIsSidebarOpen(true)}
-            className="ml-4 p-2 text-slate-400 hover:text-white md:hidden transition-colors"
+            className="app-soft-badge flex h-14 w-14 items-center justify-center rounded-[1.5rem] text-slate-500 transition-all hover:border-blue-500/25 hover:text-white md:hidden"
           >
-            <Menu size={24} />
+            <Menu size={22} />
           </button>
-          
-          <div className="flex-1">
-              <Navbar />
+
+          <div className="min-w-0 flex-1">
+            <Navbar />
           </div>
 
-          <div className="hidden md:flex items-center gap-2 px-6 border-l border-white/5">
-            <Activity size={14} className="text-blue-500" />
-            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">System Ready</span>
+          <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative flex h-12 w-12 items-center justify-center rounded-[1.2rem] bg-[#0b1224] border border-white/10 text-slate-400 hover:text-white transition-all hover:bg-white/5 active:scale-95"
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span className="absolute right-2 top-2 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)]">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  </span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 top-14 z-[999] w-80 md:w-96 rounded-[1.5rem] bg-[#0f172a] border border-white/10 shadow-2xl overflow-hidden">
+                  <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#0b1224]">
+                    <h3 className="text-sm font-black text-white uppercase tracking-widest">Notifications</h3>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-[10px] font-bold text-blue-500 hover:text-blue-400 uppercase tracking-widest flex items-center gap-1 transition-all"
+                      >
+                        <CheckCheck size={12} /> Mark all read
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto p-2">
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-slate-500 font-bold uppercase tracking-widest">
+                        No notifications
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            onClick={() => !notif.is_read && handleMarkRead(notif.id)}
+                            className={`p-3 rounded-xl transition-all cursor-pointer border border-transparent ${
+                              notif.is_read
+                                ? "opacity-60 hover:bg-white/[0.02]"
+                                : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20"
+                            }`}
+                          >
+                            <div className="flex gap-3">
+                              <div className="mt-1">
+                                <AlertTriangle size={16} className={notif.is_read ? "text-slate-500" : "text-rose-500"} />
+                              </div>
+                              <div>
+                                <p className={`text-xs ${notif.is_read ? "text-slate-400" : "text-white font-bold"}`}>
+                                  {notif.message}
+                                </p>
+                                <p className="mt-1 text-[9px] font-bold text-slate-600 uppercase tracking-widest">
+                                  {new Date(notif.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="app-soft-badge hidden items-center gap-2 rounded-full px-4 py-3 md:flex">
+              <Activity size={14} className="text-blue-500" />
+              <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                System Ready
+              </span>
+            </div>
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 relative z-10 custom-scrollbar">
+        <main className="custom-scrollbar relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 md:px-6 md:pb-6 md:pt-6">
           <motion.div
-            initial={{ opacity: 0, y: 5 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
+            className="h-full"
           >
             {children}
           </motion.div>
         </main>
 
-        <div className="h-6 bg-white/[0.02] border-t border-white/[0.02] flex items-center px-4 justify-between shrink-0">
+        <div className="relative z-10 px-3 pb-3 md:px-6 md:pb-6">
+          <div className="app-footer-surface flex h-12 items-center justify-between rounded-[1.5rem] px-4">
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-[7px] font-bold text-slate-500 uppercase tracking-tighter">Direct Node Connection</span>
+              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Direct Node Connection
+              </span>
             </div>
-            <span className="text-[7px] font-bold text-slate-600 uppercase tracking-[0.2em]">VirtueOS Stable v4.2</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-600">
+              VirtueOS Stable v4.2
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -27,6 +27,20 @@ export const grnInvoice = async (req: Request, res: Response, next: NextFunction
   } catch (err) { next(err); }
 };
 
+export const getAvailablePurchaseInvoiceGrns = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const grns = await FinanceService.getAvailableGRNsForPurchaseInvoice();
+    res.status(200).json({ success: true, data: grns });
+  } catch (err) { next(err); }
+};
+
+export const getAvailableSaleInvoiceDns = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dns = await FinanceService.getAvailableDeliveryNotesForInvoice();
+    res.status(200).json({ success: true, data: dns });
+  } catch (err) { next(err); }
+};
+
 export const getinvoice = async (req:Request,res:Response,next:NextFunction)=>{
   try {
     const invoice = await FinanceService.getinvoice();

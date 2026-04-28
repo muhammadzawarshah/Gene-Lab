@@ -65,7 +65,7 @@ export default function AccountInfo() {
       setProfile(res.data);
     } catch (err: any) {
       toast.error("DATA SYNC ERROR", { 
-        description: "Could not retrieve encrypted profile from Nexus Node." 
+        description: "Could not retrieve encrypted profile from Gene Node." 
       });
     } finally {
       setLoading(false);
@@ -204,7 +204,7 @@ export default function AccountInfo() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Phone Nexus</label>
+                <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Phone Gene</label>
                 <div className="relative">
                   <Phone className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-700" />
                   <input 

@@ -37,7 +37,7 @@ export default function CompletedDeliveries() {
 
       const allData = response.data.data || [];
       
-      const completedOnly = allData.filter((item: any) => item.status === "COMPLETED").map((item: any) => {
+      const completedOnly = allData.filter((item: any) => item.status === "COMPLETED" || item.status === "PARTIAL").map((item: any) => {
         const lineTotal = item.deliverynoteline?.reduce((acc: number, line: any) => {
           const price = parseFloat(line.product?.productprice?.[0]?.unit_price || 0);
           return acc + (parseFloat(line.delivered_qty) * price);

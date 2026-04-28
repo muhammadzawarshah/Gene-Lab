@@ -102,7 +102,7 @@ export default function DistributorDashboard() {
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] gap-4">
       <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-500 animate-pulse">Syncing Nexus Node...</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-500 animate-pulse">Syncing Gene Node...</p>
     </div>
   );
 
@@ -122,7 +122,7 @@ export default function DistributorDashboard() {
       {/* --- HEADER --- */}
       <div className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase">Nexus <span className="text-blue-600">Command</span></h1>
+          <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase">Gene <span className="text-blue-600">Command</span></h1>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-1">
              Operational Overview • Node ID: {currentUserId?.slice(0, 8)}
           </p>

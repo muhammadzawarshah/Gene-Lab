@@ -65,7 +65,8 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             items: [
                 { label: 'Create Product', href: '/distributorManager/Products/CreateProduct' },
                 { label: 'Product List', href: '/distributorManager/Products/ProductList' },
-                { label: 'Product Prices', href: '/distributorManager/ProductPrices' },
+                { label: 'UOM', href: '/distributorManager/UOM' },
+                { label: 'Mode', href: '/distributorManager/Mode' },
             ]
         },
         {

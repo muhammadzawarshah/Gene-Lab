@@ -34,6 +34,7 @@ export default function ApprovedOrderManagement() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
@@ -122,11 +123,13 @@ export default function ApprovedOrderManagement() {
 
   // --- FILTER: ONLY APPROVED ITEMS ---
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => (o.status === 'APPROVED') &&
+    return orders.filter(o =>
+      ['APPROVED', 'PARTIAL', 'COMPLETED'].includes(o.status) &&
+      (statusFilter === 'ALL' || o.status === statusFilter) &&
       (o.party?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.salesorderline.some(i => i.product?.name?.toLowerCase().includes(searchQuery.toLowerCase())))
     );
-  }, [orders, searchQuery]);
+  }, [orders, searchQuery, statusFilter]);
 
   const thStyle = "p-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/10 italic";
   const tdStyle = "p-4 text-xs font-medium text-white border-b border-white/5";
@@ -144,13 +147,38 @@ export default function ApprovedOrderManagement() {
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-1">Verified & Processed Inventory</p>
           </div>
         </div>
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-          <input
-            placeholder="Search approved records..."
-            className="w-full bg-slate-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm outline-none focus:border-emerald-500 transition-all shadow-inner backdrop-blur-md"
-            value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="flex flex-col gap-3 w-full md:w-auto">
+          <div className="relative w-full md:w-96">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+            <input
+              placeholder="Search approved records..."
+              className="w-full bg-slate-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm outline-none focus:border-emerald-500 transition-all shadow-inner backdrop-blur-md"
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            {[
+              { label: 'All', value: 'ALL', color: 'slate' },
+              { label: 'Approved', value: 'APPROVED', color: 'emerald' },
+              { label: 'Partial', value: 'PARTIAL', color: 'amber' },
+              { label: 'Completed', value: 'COMPLETED', color: 'blue' },
+            ].map(({ label, value, color }) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                  statusFilter === value
+                    ? color === 'emerald' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    : color === 'amber'   ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : color === 'blue'    ? 'bg-blue-500/20 text-blue-400 border-blue-500/40'
+                    : 'bg-white/10 text-white border-white/20'
+                    : 'bg-transparent text-slate-500 border-white/5 hover:border-white/20'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -187,7 +215,13 @@ export default function ApprovedOrderManagement() {
                     </div>
                   </td>
                   <td className={tdStyle}>
-                    <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase">
+                    <span className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase border ${
+                      order.status === 'COMPLETED'
+                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        : order.status === 'PARTIAL'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    }`}>
                       <CheckCircle2 size={10} /> {order.status}
                     </span>
                   </td>

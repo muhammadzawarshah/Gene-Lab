@@ -32,11 +32,6 @@ export const CustInvoiceReportComponent = ({ data }: Props) => {
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric', year: 'numeric' });
 
-  const formatCurrency = (amount: any) => {
-    const num = parseFloat(amount);
-    return isNaN(num) ? "0.00" : num.toLocaleString(undefined, { minimumFractionDigits: 2 });
-  };
-
   const invoiceNo = data.cust_invoice_number || `INV-${data.cust_inv_id}`;
   const lines = data.customerinvoiceline || [];
   const emptyRows = lines.length < 8 ? 8 - lines.length : 0;
@@ -93,9 +88,7 @@ export const CustInvoiceReportComponent = ({ data }: Props) => {
             <tr className="uppercase font-bold">
               <th className="border border-black px-1 py-1.5 w-10">S.No</th>
               <th className="border border-black px-2 py-1.5 text-left">Product Description</th>
-              <th className="border border-black px-1 py-1.5 w-20">Qty</th>
-              <th className="border border-black px-1 py-1.5 w-24">Rate</th>
-              <th className="border border-black px-2 py-1.5 text-right w-32">Total Amount</th>
+              <th className="border border-black px-1 py-1.5 w-28">Qty</th>
             </tr>
           </thead>
           <tbody>
@@ -104,8 +97,6 @@ export const CustInvoiceReportComponent = ({ data }: Props) => {
                 <td className="border border-black text-center">{index + 1}</td>
                 <td className="border border-black px-2 font-bold uppercase">{item.product?.name}</td>
                 <td className="border border-black text-center">{item.quantity}</td>
-                <td className="border border-black text-center">{formatCurrency(item.unit_price)}</td>
-                <td className="border border-black px-2 text-right font-semibold">{formatCurrency(item.line_total)}</td>
               </tr>
             ))}
             {Array.from({ length: emptyRows }).map((_, i) => (
@@ -113,51 +104,9 @@ export const CustInvoiceReportComponent = ({ data }: Props) => {
                 <td className="border border-black text-center"></td>
                 <td className="border border-black px-2"></td>
                 <td className="border border-black text-center"></td>
-                <td className="border border-black text-center"></td>
-                <td className="border border-black px-2 text-right"></td>
               </tr>
             ))}
           </tbody>
-          <tfoot className="font-bold italic">
-            <tr>
-              <td colSpan={3} className="border-none"></td>
-              <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">Sub Total:</td>
-              <td className="border border-black px-2 py-1 text-right">PKR {formatCurrency(lines.reduce((sum, item) => sum + parseFloat(item.line_total || 0), 0))}</td>
-            </tr>
-            {lines.some(l => parseFloat(l.discount || 0) > 0) && (
-              <tr>
-                <td colSpan={3} className="border-none"></td>
-                <td className="border border-black px-2 py-1 bg-rose-50 text-[10px] uppercase text-rose-600">Total Discount:</td>
-                <td className="border border-black px-2 py-1 text-right text-rose-600">
-                  -PKR {formatCurrency(lines.reduce((sum, item) => sum + (parseFloat(item.discount || 0) * parseFloat(item.quantity || 0)), 0))}
-                </td>
-              </tr>
-            )}
-            {lines.some(l => l.tax) && (
-              <tr>
-                <td colSpan={3} className="border-none"></td>
-                <td className="border border-black px-2 py-1 bg-blue-50 text-[10px] uppercase text-blue-600">Total Tax:</td>
-                <td className="border border-black px-2 py-1 text-right text-blue-600">
-                  +PKR {formatCurrency(lines.reduce((sum: number, item: any) => {
-                    if (!item.tax) return sum;
-                    const taxRate = parseFloat(item.tax?.rate || 0);
-                    const lineTotal = parseFloat(item.line_total || 0);
-                    const taxAmount = item.tax?.type === 'percentage' 
-                      ? (lineTotal * taxRate) / 100 
-                      : taxRate;
-                    return sum + (isNaN(taxAmount) ? 0 : taxAmount);
-                  }, 0))}
-                </td>
-              </tr>
-            )}
-            <tr>
-              <td colSpan={3} className="border-none"></td>
-              <td className="border border-black px-2 py-2 bg-gray-100 uppercase text-xs">Net Total</td>
-              <td className="border border-black px-2 py-2 text-right bg-gray-100 text-sm decoration-double underline">
-                PKR {formatCurrency(data.total_amount)}
-              </td>
-            </tr>
-          </tfoot>
         </table>
       </div>
 

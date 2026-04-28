@@ -55,8 +55,9 @@ export default function CreateInvoice() {
   const fetchGRNList = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await api.get(`/api/v1/grn/`);
-      setGrnList(res.data);
+      const res = await api.get(`/api/v1/finance/invoice/grns/available`);
+      const nextList = Array.isArray(res.data?.data) ? res.data.data : [];
+      setGrnList(nextList);
     } catch (err) {
       toast.error("Database Error: Failed to fetch GRN records");
     }
@@ -102,6 +103,7 @@ export default function CreateInvoice() {
   const handleCreateInvoice = async () => {
     if (!selectedGRNId) return;
     const toastId = toast.loading("Finalizing Secure Invoice...");
+    const createdGRNId = selectedGRNId;
     
     try {
       const payload = {
@@ -113,11 +115,13 @@ export default function CreateInvoice() {
       await api.post(`/api/v1/finance/invoice/generate/${selectedGRNId}`, payload);
       
       toast.success("Invoice successfully created!", { id: toastId });
+      setGrnList((prev) => prev.filter((grn) => String(grn.grn_id) !== createdGRNId));
       setSelectedGRNId("");
       setItems([]);
       fetchGRNList();
-    } catch (err) {
-      toast.error("Invoice Generation Failed", { id: toastId });
+    } catch (err: any) {
+      const message = err?.response?.data?.message || "Invoice Generation Failed";
+      toast.error(message, { id: toastId });
     }
   };
 
@@ -150,7 +154,9 @@ export default function CreateInvoice() {
               value={selectedGRNId}
               onChange={(e) => setSelectedGRNId(e.target.value)}
             >
-              <option value="">-- SELECT GRN VAULT --</option>
+              <option value="">
+                {grnList.length ? "-- SELECT GRN VAULT --" : "-- NO PENDING GRN FOUND --"}
+              </option>
               {grnList.map((grn) => (
                 <option key={grn.grn_id} value={grn.grn_id}>{grn.grn_number}</option>
               ))}

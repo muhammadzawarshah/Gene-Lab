@@ -3,125 +3,204 @@ import { prisma } from '../lib/prisma.js';
 export class FinanceService {
   /**
    * FLOW C: Generate Invoice from Delivery Note
+   * Creates Customer Invoice + 4-line Journal Entry:
+   *   DR 1.3 Accounts Receivable  (invoice amount)
+   *   CR 4.1 Sales Revenue        (invoice amount)
+   *   DR 5.1 Cost of Goods Sold   (at purchase/cost price)
+   *   CR 1.4 Inventory            (at purchase/cost price)
    */
   static async createInvoice(deliveryId: string, narration?: string, userId?: string) {
     return await prisma.$transaction(async (tx) => {
+
+      // ── 1. Fetch Delivery Note with all related data ──────────────────────
       const delivery = await tx.deliverynote.findUnique({
         where: { delivery_number: deliveryId },
-        include: { salesorder: { include: { salesorderline: true } } }
+        include: {
+          salesorder: {
+            include: { salesorderline: true }
+          },
+          deliverynoteline: true   // Actual delivered quantities for COGS
+        }
       });
 
-      if (!delivery || !delivery.salesorder) throw new Error("Delivery or SO not found");
+      if (!delivery || !delivery.salesorder) {
+        throw new Error('Delivery Note or Sales Order not found.');
+      }
 
-      // 1. Create the Invoice Header
+      // ── 2. Guard: Prevent duplicate invoice for same Sales Order ──────────
+      const existingInvoice = await tx.customerinvoice.findFirst({
+        where: { so_id: delivery.so_id }
+      });
+      if (existingInvoice) {
+        throw new Error(
+          `Invoice already exists for this Delivery Note (Invoice ID: ${existingInvoice.cust_inv_id}).`
+        );
+      }
+
+      // ── 3. Resolve GL Accounts dynamically from DB by account code ────────
+      const glAccounts = await tx.glaccount.findMany({
+        where: { gl_account_code: { in: ['1.3', '4.1', '5.1', '1.4'] } },
+        select: { gl_account_id: true, gl_account_code: true }
+      });
+      const glMap: Record<string, number> = {};
+      for (const acc of glAccounts) {
+        glMap[acc.gl_account_code] = acc.gl_account_id;
+      }
+      // Validate all required GL accounts exist
+      for (const code of ['1.3', '4.1', '5.1', '1.4']) {
+        if (!glMap[code]) {
+          throw new Error(`GL Account ${code} not found. Please run the database seed script.`);
+        }
+      }
+
+      // ── 4. Create Customer Invoice Header ─────────────────────────────────
       const invoice = await tx.customerinvoice.create({
         data: {
-          so_id: delivery.so_id,
+          so_id:             delivery.so_id,
           party_id_customer: delivery.salesorder.party_id_customer,
           cust_invoice_date: new Date(),
-          total_amount: delivery.salesorder.total_amount,
-          status: 'POSTED',
+          total_amount:      delivery.salesorder.total_amount,
+          status:            'POSTED',
         } as any
       });
 
-      // 2. Create Invoice Lines
+      // ── 5. Create Invoice Lines (from Sales Order Lines) ──────────────────
       await tx.customerinvoiceline.createMany({
         data: delivery.salesorder.salesorderline.map((line) => ({
           cust_inv_id: invoice.cust_inv_id,
-          product_id: line.product_id,
-          quantity: line.quantity,
-          unit_price: line.unit_price,
-          line_total: line.line_total,
-          tax_id: line.tax_id
-
+          product_id:  line.product_id,
+          quantity:    line.quantity,
+          unit_price:  line.unit_price,
+          line_total:  line.line_total,
+          tax_id:      line.tax_id,
         })),
-        skipDuplicates: true
+        skipDuplicates: true,
       } as any);
 
-      // 3. Get purchase cost for COGS calculation
-      const productIds = delivery.salesorder.salesorderline.map(l => l.product_id);
+      // ── 6. Calculate COGS using ACTUAL DELIVERED quantities ───────────────
+      //    Price source priority:
+      //      (a) Latest Supplier Invoice Line  (purchase price)
+      //      (b) Product Price table           (fallback if no purchase yet)
+      const deliveredProductIds = [
+        ...new Set(delivery.deliverynoteline.map((l) => l.product_id))
+      ];
+
+      // (a) Latest purchase price from supplier invoice lines
       const latestCostLines = await tx.supplierinvoiceline.findMany({
-        where:   { product_id: { in: productIds } },
+        where:   { product_id: { in: deliveredProductIds } },
         orderBy: { suppl_inv_line_id: 'desc' },
         select:  { product_id: true, unit_price: true },
       });
-      // Keep only the most recent price per product
       const costMap = new Map<string, number>();
       for (const cl of latestCostLines) {
         if (cl.product_id && !costMap.has(cl.product_id)) {
           costMap.set(cl.product_id, Number(cl.unit_price));
         }
       }
-      const cogsTotal = delivery.salesorder.salesorderline.reduce((sum, line) => {
-        return sum + Number(line.quantity) * (costMap.get(line.product_id ?? '') || 0);
-      }, 0);
 
+      // (b) Fallback: productprice table for products with no supplier invoice yet
+      const missingIds = deliveredProductIds.filter((id) => !costMap.has(id));
+      if (missingIds.length > 0) {
+        const fallbackPrices = await tx.productprice.findMany({
+          where: {
+            product_id:   { in: missingIds },
+            effective_to: null,
+          },
+          orderBy: { effective_from: 'desc' },
+          select:  { product_id: true, unit_price: true },
+        });
+        for (const fp of fallbackPrices) {
+          if (!costMap.has(fp.product_id)) {
+            costMap.set(fp.product_id, Number(fp.unit_price));
+          }
+        }
+      }
+
+      // COGS = Σ (delivered_qty × unit_cost) per delivery line
+      let cogsTotal = 0;
+      for (const dnLine of delivery.deliverynoteline) {
+        const unitCost = costMap.get(dnLine.product_id) ?? 0;
+        cogsTotal += Number(dnLine.delivered_qty) * unitCost;
+      }
+      cogsTotal = Math.round(cogsTotal * 100) / 100;
+
+      const salesAmount = Number(invoice.total_amount) || 0;
+      const customerId  = delivery.salesorder.party_id_customer;
+      const journalNum  = `SINV-${invoice.cust_inv_id}`;
+
+      // ── 7. Create Journal Entry — 4 lines ────────────────────────────────
       /*
-      ==========================
-      ACCOUNTING ENTRY — Delivery Note Invoice
-        DR  1.3  Accounts Receivable   (customer owes us)
-        CR  4.1  Sales Revenue         (income earned)
-        DR  5.1  Cost of Goods Sold    (expense at purchase price)
-        CR  1.4  Inventory             (stock leaves at purchase price)
-      ==========================
+      ====================================================
+      ACCOUNTING ENTRIES — Delivery Note Invoice
+        DR  1.3  Accounts Receivable  (customer owes us)   ← invoice total
+        CR  4.1  Sales Revenue        (income recognised)  ← invoice total
+        DR  5.1  Cost of Goods Sold   (at cost price)      ← COGS total
+        CR  1.4  Inventory            (stock out at cost)  ← COGS total
+      ====================================================
       */
       await tx.journalentry.create({
         data: {
-          journal_number: `SINV-${invoice.cust_inv_id}`,
-          journal_type:   "SALES",
+          journal_number: journalNum,
+          journal_type:   'SALES',
           date:           new Date(),
-          narration:      narration || `Sales Invoice — Delivery #${deliveryId}`,
+          narration:      narration || `Sales Invoice — Delivery Note #${deliveryId}`,
           posted_by:      userId ? String(userId) : null,
           posted_at:      new Date(),
-          source_type:    "CUSTOMER_INVOICE",
+          source_type:    'CUSTOMER_INVOICE',
           source_id:      invoice.cust_inv_id,
           journalline: {
             create: [
               {
                 // DR 1.3 Accounts Receivable — customer owes us
-                gl_account_id:      13,
-                debit:              invoice.total_amount,
-                credit:             0,
-                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+                gl_account_id:       glMap['1.3'],
+                debit:               salesAmount,
+                credit:              0,
+                party_id_sub_ledger: customerId,
               },
               {
-                // CR 4.1 Sales Revenue
-                gl_account_id: 41,
-                debit:  0,
-                credit: invoice.total_amount,
-                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+                // CR 4.1 Sales Revenue — income recognised
+                gl_account_id:       glMap['4.1'],
+                debit:               0,
+                credit:              salesAmount,
+                party_id_sub_ledger: customerId,
               },
               {
-                // DR 5.1 Cost of Goods Sold (at purchase price)
-                gl_account_id: 51,
-                debit:  cogsTotal,
-                credit: 0,
-                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+                // DR 5.1 Cost of Goods Sold — at purchase/cost price
+                gl_account_id:       glMap['5.1'],
+                debit:               cogsTotal,
+                credit:              0,
+                party_id_sub_ledger: customerId,
               },
               {
-                // CR 1.4 Inventory (stock out at cost)
-                gl_account_id: 14,
-                debit:  0,
-                credit: cogsTotal,
-                party_id_sub_ledger: delivery.salesorder.party_id_customer,
+                // CR 1.4 Inventory — stock leaves at cost price
+                gl_account_id:       glMap['1.4'],
+                debit:               0,
+                credit:              cogsTotal,
+                party_id_sub_ledger: customerId,
               },
             ]
           }
         }
       } as any);
 
+      // ── 8. Update Account Balances (Trial Balance / Balance Sheet) ────────
       await FinanceService.updateAccountBalances(tx, [
-        { gl_account_id: 13, debit: Number(invoice.total_amount), credit: 0 },
-        { gl_account_id: 41, debit: 0, credit: Number(invoice.total_amount) },
-        { gl_account_id: 51, debit: cogsTotal, credit: 0 },
-        { gl_account_id: 14, debit: 0, credit: cogsTotal },
+        { gl_account_id: glMap['1.3'], debit: salesAmount, credit: 0           },
+        { gl_account_id: glMap['4.1'], debit: 0,           credit: salesAmount },
+        { gl_account_id: glMap['5.1'], debit: cogsTotal,   credit: 0           },
+        { gl_account_id: glMap['1.4'], debit: 0,           credit: cogsTotal   },
       ]);
 
-      return invoice;
+      return {
+        ...invoice,
+        journal_number: journalNum,
+        cogs_total:     cogsTotal,
+        sales_amount:   salesAmount,
+      };
     });
   }
 
-    static async createInvoiceFromGRN(grnId: number, narration?: string, userId?: string) {
+  static async createInvoiceFromGRN(grnId: number, narration?: string, userId?: string) {
 
     return prisma.$transaction(async (tx) => {
 
@@ -139,6 +218,24 @@ export class FinanceService {
 
       if (!grn || !grn.purchaseorder) {
         throw new Error("GRN_OR_PO_NOT_FOUND");
+      }
+
+      if (!grn.po_id) {
+        throw new Error("GRN_PO_LINK_REQUIRED");
+      }
+
+      const existingInvoice = await tx.supplierinvoice.findFirst({
+        where: { po_id: grn.po_id },
+        select: {
+          suppl_inv_id: true,
+          suppl_invoice_number: true
+        }
+      });
+
+      if (existingInvoice) {
+        throw new Error(
+          `Purchase invoice already exists for this GRN (${existingInvoice.suppl_invoice_number || `PINV-${existingInvoice.suppl_inv_id}`}).`
+        );
       }
 
       /*
@@ -233,6 +330,72 @@ export class FinanceService {
 
   }
 
+  static async getAvailableDeliveryNotesForInvoice() {
+    const invoicedSoIds = await prisma.customerinvoice.findMany({
+      where: { so_id: { not: null } },
+      select: { so_id: true }
+    });
+
+    const excludedSoIds = invoicedSoIds
+      .map((inv) => inv.so_id)
+      .filter((id): id is number => id !== null);
+
+    return prisma.deliverynote.findMany({
+      where: {
+        so_id: {
+          not: null,
+          ...(excludedSoIds.length ? { notIn: excludedSoIds } : {})
+        }
+      },
+      select: {
+        delv_note_id: true,
+        delivery_number: true,
+        delv_date: true,
+        salesorder: {
+          select: {
+            total_amount: true,
+            party: { select: { name: true } }
+          }
+        }
+      },
+      orderBy: { delv_date: 'desc' }
+    });
+  }
+
+  static async getAvailableGRNsForPurchaseInvoice() {
+    const invoicedPurchaseOrders = await prisma.supplierinvoice.findMany({
+      where: {
+        po_id: {
+          not: null
+        }
+      },
+      select: {
+        po_id: true
+      }
+    });
+
+    const excludedPoIds = invoicedPurchaseOrders
+      .map((invoice) => invoice.po_id)
+      .filter((poId): poId is number => poId !== null);
+
+    return prisma.grn.findMany({
+      where: {
+        po_id: {
+          not: null,
+          ...(excludedPoIds.length ? { notIn: excludedPoIds } : {})
+        }
+      },
+      select: {
+        grn_id: true,
+        grn_number: true,
+        received_date: true
+      },
+      orderBy: {
+        received_date: 'desc'
+      }
+    });
+  }
+
 
   /**
    * FLOW D: Payment & Allocation
@@ -284,10 +447,18 @@ static async processPayment(data: {
           }
         });
 
-        // 4. Update Invoice Status
+        // 4. Update Invoice Status using cumulative allocations
+        const allocationSummary = await tx.paymentallocation.aggregate({
+          where: { cust_inv_id: Number(invoiceId) },
+          _sum: { allocated_amount: true }
+        });
+        const totalPaid = Number(allocationSummary._sum.allocated_amount || 0);
+        const invoiceTotal = Number(invoice.total_amount || 0);
+        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'POSTED';
+
         await tx.customerinvoice.update({
           where: { cust_inv_id: Number(invoiceId) },
-          data: { status: 'PAID' }
+          data: { status: newStatus as any }
         });
 
         /*
@@ -416,12 +587,35 @@ static async processPayment(data: {
 }
 
 static async getinvoice(){
-  return prisma.customerinvoice.findMany({
+  const invoices = await prisma.customerinvoice.findMany({
     include: {
       party: { select: { name: true, phone: true, email: true } },
-      customerinvoiceline: { select: { cust_inv_line_id: true } }
+      customerinvoiceline: { select: { cust_inv_line_id: true } },
+      paymentallocation: { select: { allocated_amount: true } }
     },
     orderBy: { cust_invoice_date: 'desc' }
+  });
+
+  return invoices.map((invoice: any) => {
+    const totalAmount = Number(invoice.total_amount || 0);
+    const paidAmount = (invoice.paymentallocation || []).reduce(
+      (sum: number, allocation: any) => sum + Number(allocation.allocated_amount || 0),
+      0
+    );
+    const balanceAmount = totalAmount - paidAmount;
+    const computedStatus =
+      balanceAmount <= 0 && totalAmount > 0
+        ? 'PAID'
+        : paidAmount > 0
+          ? 'PARTIAL'
+          : (invoice.status || 'POSTED');
+
+    return {
+      ...invoice,
+      paidAmount,
+      balanceAmount,
+      status: computedStatus
+    };
   });
 }
 
@@ -517,8 +711,14 @@ static async processPurchasePayment(data: {
           }
         });
 
-        // 4. Update Supplier Invoice Status
-        const newStatus = Number(amount) >= Number(invoice.total_amount) ? 'PAID' : 'PARTIAL';
+        // 4. Update Supplier Invoice Status using cumulative allocations
+        const allocationSummary = await tx.paymentallocation.aggregate({
+          where: { suppl_inv_id: Number(invoiceId) },
+          _sum: { allocated_amount: true }
+        });
+        const totalPaid = Number(allocationSummary._sum.allocated_amount || 0);
+        const invoiceTotal = Number(invoice.total_amount || 0);
+        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : totalPaid > 0 ? 'PARTIAL' : 'POSTED';
         await tx.supplierinvoice.update({
           where: { suppl_inv_id: Number(invoiceId) },
           data: { status: newStatus as any }

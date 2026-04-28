@@ -64,10 +64,9 @@ export default function CreateInvoice() {
   const fetchOrderList = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await api.get('/api/v1/distribution/listdel');
-      const rawData = res.data.data || res.data;
-      const dataArray = Array.isArray(rawData) ? rawData : [];
-      
+      const res = await api.get('/api/v1/finance/invoice/dns/available');
+      const dataArray = Array.isArray(res.data.data) ? res.data.data : [];
+
       const formattedList = dataArray.map((ord: any) => ({
         _id: ord.delivery_number,
         deliveryNumber: ord.delivery_number

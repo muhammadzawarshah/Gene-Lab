@@ -7,8 +7,11 @@ const router = Router();
 router.post('/', ProductController.create);
 
 router.get('/', ProductController.list);
+router.get('/next-codes', ProductController.getNextCodes);
 
 router.get('/expired-report', ProductController.getExpiredReport);
+
+router.get('/low-stock', ProductController.getLowStock);
 
 router.get('/category/:id', ProductController.getproductoncategory);
 

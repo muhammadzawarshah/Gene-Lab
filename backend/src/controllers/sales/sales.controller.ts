@@ -62,6 +62,17 @@ export const getDashboardStats = async (req: any, res: any) => {
   }
 };
 
+// Distribution Manager ka main dashboard — koi ID nahi chahiye
+export const getManagerDashboard = async (req: any, res: any) => {
+  try {
+    const stats = await SalesService.getDistributorManagerDashboard();
+    res.status(200).json({ success: true, data: stats });
+  } catch (error: any) {
+    console.error('Manager Dashboard Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const getFinancialLedger = async (req: any, res: any) => {
   try {
     const { id } = req.params;

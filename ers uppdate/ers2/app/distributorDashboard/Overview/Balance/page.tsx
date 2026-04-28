@@ -236,7 +236,7 @@ export default function OutstandingBalance() {
             <div className="flex items-center gap-3">
                 <AlertCircle size={16} className="text-blue-500" />
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-relaxed">
-                    Nexus-Calculated balances based on confirmed <span className="text-blue-400">GRNs</span> and generated <span className="text-blue-400">Invoices</span>.
+                    Gene-Calculated balances based on confirmed <span className="text-blue-400">GRNs</span> and generated <span className="text-blue-400">Invoices</span>.
                 </span>
             </div>
             <button className="text-[10px] font-black text-blue-500 hover:text-blue-400 transition-all uppercase tracking-widest border-b border-blue-500/20 pb-1">

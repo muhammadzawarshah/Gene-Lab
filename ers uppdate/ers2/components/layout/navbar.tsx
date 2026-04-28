@@ -1,14 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { usePathname } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ChevronDown, LogOut, User as UserIcon, 
-  ShieldCheck, Loader2 
-} from 'lucide-react';
-import Cookies from 'js-cookie';
-import { useAuth } from '@/app/context/authcontext';
+import React, { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronDown,
+  LogOut,
+  User as UserIcon,
+  ShieldCheck,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+import Cookies from "js-cookie";
+import { useAuth } from "@/app/context/authcontext";
+import ThemeToggle from "./theme-toggle";
 
 export default function Navbar() {
   const { logout } = useAuth();
@@ -19,101 +24,116 @@ export default function Navbar() {
 
   useEffect(() => {
     const syncUser = () => {
-      const savedUser = Cookies.get('virtue_user');
+      const savedUser = Cookies.get("virtue_user");
       if (savedUser) {
         try {
-          const parsed = JSON.parse(savedUser);
-          // Console log ke mutabiq keys map ho rahi hain
-          setActiveUser(parsed);
-        } catch (e) {
-          console.error("Auth Sync Error", e);
+          setActiveUser(JSON.parse(savedUser));
+        } catch (error) {
+          console.error("Auth Sync Error", error);
         }
       }
       setIsSyncing(false);
     };
 
     syncUser();
-    window.addEventListener('focus', syncUser);
-    return () => window.removeEventListener('focus', syncUser);
+    window.addEventListener("focus", syncUser);
+    return () => window.removeEventListener("focus", syncUser);
   }, []);
 
   const currentPathLabel = useMemo(() => {
-    const segments = pathname.split('/').filter(Boolean);
+    const segments = pathname.split("/").filter(Boolean);
     if (segments.length === 0) return "DASHBOARD";
-    return segments[segments.length - 1].replace(/-/g, ' ').toUpperCase();
+    return segments[segments.length - 1].replace(/-/g, " ").toUpperCase();
   }, [pathname]);
 
-  // Avatar ke liye logic: Agar name nahi hai toh email ka pehla letter use karein
   const renderAvatar = () => {
     const displayName = activeUser?.name || activeUser?.useremail || "";
+
     if (displayName) {
-      return <span className="text-white font-black text-xs">{displayName[0].toUpperCase()}</span>;
+      return <span className="text-xs font-black text-white">{displayName[0].toUpperCase()}</span>;
     }
+
     return <UserIcon size={18} className="text-white/50" />;
   };
 
   return (
-    <nav className="h-20 px-4 md:px-8 border-b border-white/[0.05] bg-[#020617]/80 backdrop-blur-xl sticky top-0 z-[100] flex items-center justify-between">
-      
-      {/* IDENTITY */}
-      <div className="flex flex-col">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-[8px] font-black tracking-[0.3em] text-blue-500 uppercase">System_Active</span>
-          <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+    <nav className="app-topbar-surface flex h-20 items-center justify-between gap-4 rounded-[1.75rem] px-4 md:px-6">
+      <div className="min-w-0">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="app-soft-badge inline-flex items-center gap-2 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.28em] text-blue-500">
+            <Sparkles size={10} />
+            Refined Workspace
+          </span>
         </div>
-        <h1 className="text-sm md:text-lg font-black text-white tracking-tighter italic uppercase">
-          GENE Labs <span className="text-slate-700 font-thin not-italic">/</span> 
-          <span className="text-blue-600/80 text-xs md:text-sm font-bold ml-2">{currentPathLabel}</span>
+
+        <h1 className="truncate text-sm font-black uppercase tracking-[0.14em] text-white md:text-lg">
+          Gene Labs
+          <span className="mx-2 text-slate-600">/</span>
+          <span className="text-blue-500">{currentPathLabel}</span>
         </h1>
+
+        <p className="mt-1 hidden text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 sm:block">
+          Clean layout, better spacing, lighter visual rhythm
+        </p>
       </div>
 
-      {/* USER SECTION */}
-      <div className="relative">
-        <button 
+      <div className="relative flex items-center gap-3">
+        <ThemeToggle />
+
+        <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="flex items-center gap-3 p-1.5 pr-3 hover:bg-white/[0.04] rounded-2xl cursor-pointer transition-all border border-white/5 group"
+          className="app-soft-badge group flex items-center gap-3 rounded-[1.25rem] p-1.5 pr-3 transition-all hover:border-blue-500/25 hover:bg-blue-500/5"
         >
           <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center border border-white/10 shadow-lg">
-              {isSyncing ? <Loader2 size={16} className="animate-spin text-white/30" /> : renderAvatar()}
+            <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-gradient-to-br from-blue-600 via-sky-500 to-cyan-400 shadow-lg shadow-blue-500/20">
+              {isSyncing ? <Loader2 size={16} className="animate-spin text-white/40" /> : renderAvatar()}
             </div>
-            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#020617] rounded-full shadow-lg" />
+            <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-[#020617] bg-emerald-500 shadow-lg" />
           </div>
 
-          <div className="hidden md:block text-left min-w-[100px]">
-            <p className="text-[11px] font-black text-white uppercase truncate tracking-tight">
-              {/* Check for useremail because name is missing in your object */}
-              {activeUser?.name || activeUser?.useremail?.split('@')[0] || 'Unknown User'}
+          <div className="hidden min-w-[118px] text-left md:block">
+            <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-white">
+              {activeUser?.name || activeUser?.useremail?.split("@")[0] || "Unknown User"}
             </p>
-            <p className="text-[9px] text-slate-500 uppercase font-bold italic flex items-center gap-1">
+            <p className="mt-1 flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
               <ShieldCheck size={10} className="text-blue-500" />
-              {activeUser?.role?.replace(/_/g, ' ') || 'Verifying...'}
+              {activeUser?.role?.replace(/_/g, " ") || "Verifying"}
             </p>
           </div>
-          <ChevronDown className={`w-4 h-4 text-slate-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+
+          <ChevronDown
+            className={`h-4 w-4 text-slate-600 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
+          />
         </button>
 
         <AnimatePresence>
           {isDropdownOpen && (
             <>
-              <div className="fixed inset-0 z-[-1]" onClick={() => setIsDropdownOpen(false)} />
+              <div className="fixed inset-0 z-2" onClick={() => setIsDropdownOpen(false)} />
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 15 }}
-                className="absolute right-0 mt-4 w-64 bg-[#0f172a] border border-white/10 rounded-[2rem] shadow-2xl z-50 p-2"
+                exit={{ opacity: 0, y: 14 }}
+                className="app-panel absolute right-0 top-full z-[999] mt-4 w-72 rounded-[2rem] p-2"
               >
-                <div className="p-4 bg-white/[0.03] rounded-[1.5rem] mb-2 border border-white/5">
-                  <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1.5 italic">Session Info</p>
-                  {/* Changed from .email to .useremail */}
-                  <p className="text-xs font-bold text-white truncate">{activeUser?.useremail || 'No email found'}</p>
+                <div className="app-soft-badge mb-2 rounded-[1.5rem] p-4">
+                  <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.26em] text-blue-500">
+                    Session Info
+                  </p>
+                  <p className="truncate text-sm font-bold text-white">
+                    {activeUser?.useremail || "No email found"}
+                  </p>
                 </div>
 
-                <button 
-                  onClick={() => { logout(); setIsDropdownOpen(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all uppercase tracking-widest"
+                <button
+                  onClick={() => {
+                    logout();
+                    setIsDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[1.2rem] px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-rose-500 transition-all hover:bg-rose-500 hover:text-white"
                 >
-                  <LogOut size={14} /> Terminate Session
+                  <LogOut size={14} />
+                  Terminate Session
                 </button>
               </motion.div>
             </>

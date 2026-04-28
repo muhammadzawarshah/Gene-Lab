@@ -127,8 +127,17 @@ export default function ProfileSettings() {
     if (securityKeys.newKey !== securityKeys.confirmKey) {
       return toast.error("New password and confirmation do not match.");
     }
-    if (securityKeys.newKey.length < 6) {
-      return toast.error("New password must be at least 6 characters.");
+    const isValidPassword = (pw: string) => {
+      if (pw.length < 8) return false;
+      if (!/[A-Z]/.test(pw)) return false;
+      if (!/[a-z]/.test(pw)) return false;
+      if (!/[0-9]/.test(pw)) return false;
+      if (!/[^A-Za-z0-9]/.test(pw)) return false;
+      return true;
+    };
+
+    if (!isValidPassword(securityKeys.newKey)) {
+      return toast.warning("SECURITY RISK", { description: "Password must be at least 8 chars with uppercase, lowercase, number, and special character." });
     }
     if (!userId) return toast.error("User ID not found. Please re-login.");
 

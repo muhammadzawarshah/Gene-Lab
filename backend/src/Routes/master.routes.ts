@@ -6,8 +6,19 @@ const router = Router();
 // Master Endpoints
 router.post('/product', ERPController.createProduct);
 router.post('/party', ERPController.addParty);
-router.post('/uom', ERPController.createUOM);
 router.get('/setup-data', ERPController.getDropdowns);
+
+// UOM Routes
+router.get('/uom', ERPController.getAllUOMs);
+router.post('/uom', ERPController.createUOM);
+router.put('/uom/:id', ERPController.updateUOM);
+router.delete('/uom/:id', ERPController.deleteUOM);
+
+// Mode Routes
+router.get('/mode', ERPController.getAllModes);
+router.post('/mode', ERPController.createMode);
+router.put('/mode/:id', ERPController.updateMode);
+router.delete('/mode/:id', ERPController.deleteMode);
 
 // Transaction Endpoints
 router.post('/purchase/order', ERPController.createPurchaseOrder);

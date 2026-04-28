@@ -14,12 +14,6 @@ import { cn } from "@/lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
-interface BatchItem {
-  product_id: string;
-  received_quantity: number;
-  available_quantity: number;
-}
-
 interface BatchRow {
   id: number;
   batch_number: string;
@@ -32,14 +26,10 @@ interface BatchRow {
   items: { item_id: number; product_id: string; product_name: string; product_code: string; received_qty: number; available_qty: number }[];
 }
 
-const emptyItem: BatchItem = { product_id: '', received_quantity: 0, available_quantity: 0 };
-
 const emptyForm = {
   batch_number: '',
   manufacturing_date: '',
   expiry_date: '',
-  location_id: '',
-  items: [{ ...emptyItem }] as BatchItem[],
 };
 
 function calcStatus(expiry: string): { status: 'Critical' | 'Warning' | 'Safe'; daysLeft: number } {
@@ -77,8 +67,6 @@ const labelCls = "block text-[9px] font-black text-slate-500 uppercase tracking-
 
 export default function ExpiryManagement() {
   const [batches, setBatches] = useState<BatchRow[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [provinces, setProvinces] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'Critical' | 'Warning' | 'Safe'>('Critical');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -105,43 +93,17 @@ export default function ExpiryManagement() {
     }
   };
 
-  const fetchDropdowns = async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/api/v1/erp/setup-data`, { headers });
-      setProducts(res.data.data?.products || []);
-      setProvinces(res.data.data?.provinces || []);
-    } catch { }
-  };
-
-  useEffect(() => { fetchBatches(); fetchDropdowns(); }, []);
-
-  // ── Item row helpers ──────────────────────────────────────────────────────
-  const addItem = () => setForm(f => ({ ...f, items: [...f.items, { ...emptyItem }] }));
-
-  const removeItem = (idx: number) =>
-    setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
-
-  const updateItem = (idx: number, field: keyof BatchItem, value: string | number) =>
-    setForm(f => {
-      const items = [...f.items];
-      items[idx] = { ...items[idx], [field]: value };
-      // Auto-fill available = received when received changes
-      if (field === 'received_quantity') items[idx].available_quantity = Number(value);
-      return { ...f, items };
-    });
+  useEffect(() => { fetchBatches(); }, []);
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.items.some(i => !i.product_id)) return toast.warning("Select a product for every row");
     setIsSaving(true);
     try {
       await axios.post(`${API_BASE}/api/v1/batch`, {
         batch_number: form.batch_number,
         manufacturing_date: form.manufacturing_date || undefined,
         expiry_date: form.expiry_date || undefined,
-        location_id: form.location_id ? Number(form.location_id) : undefined,
-        items: form.items,
       }, { headers });
       toast.success("Batch created");
       setShowModal(null);
@@ -157,15 +119,12 @@ export default function ExpiryManagement() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId) return;
-    if (form.items.some(i => !i.product_id)) return toast.warning("Select a product for every row");
     setIsSaving(true);
     try {
       await axios.put(`${API_BASE}/api/v1/batch/${editingId}`, {
         batch_number: form.batch_number,
         manufacturing_date: form.manufacturing_date || undefined,
         expiry_date: form.expiry_date || undefined,
-        location_id: form.location_id ? Number(form.location_id) : undefined,
-        items: form.items,
       }, { headers });
       toast.success("Batch updated");
       setShowModal(null);
@@ -196,10 +155,6 @@ export default function ExpiryManagement() {
       batch_number: row.batch_number,
       manufacturing_date: row.mfg === 'N/A' ? '' : row.mfg,
       expiry_date: row.expiry === 'N/A' ? '' : row.expiry,
-      location_id: row.location_id?.toString() || '',
-      items: row.items.length > 0
-        ? row.items.map(i => ({ product_id: i.product_id, received_quantity: i.received_qty, available_quantity: i.available_qty }))
-        : [{ ...emptyItem }],
     });
     setEditingId(row.id);
     setShowModal('edit');
@@ -590,68 +545,6 @@ export default function ExpiryManagement() {
                     <input type="date" required value={form.expiry_date}
                       onChange={e => setForm({ ...form, expiry_date: e.target.value })}
                       className={inputCls} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className={labelCls}>Province / Location</label>
-                    <select value={form.location_id}
-                      onChange={e => setForm({ ...form, location_id: e.target.value })}
-                      className={inputCls}>
-                      <option value="" className="bg-[#0f172a] text-slate-400">Select Province</option>
-                      {provinces.map((p: any) => (
-                        <option key={p.province_id} value={p.province_id} className="bg-[#0f172a] text-white">{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Products Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className={labelCls + " mb-0"}>Products in this Batch *</label>
-                    <button type="button" onClick={addItem}
-                      className="text-[9px] font-black uppercase tracking-widest text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors">
-                      <Plus size={11} /> Add Product
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {form.items.map((item, idx) => (
-                      <div key={idx} className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Product {idx + 1}</span>
-                          {form.items.length > 1 && (
-                            <button type="button" onClick={() => removeItem(idx)}
-                              className="p-1 text-slate-600 hover:text-rose-500 transition-colors">
-                              <X size={12} />
-                            </button>
-                          )}
-                        </div>
-                        <select required value={item.product_id}
-                          onChange={e => updateItem(idx, 'product_id', e.target.value)}
-                          className={inputCls}>
-                          <option value="" className="bg-[#0f172a] text-slate-400">Select Product</option>
-                          {products.map((p: any) => (
-                            <option key={p.product_id} value={p.product_id} className="bg-[#0f172a] text-white">
-                              {p.name} — {p.sku_code}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className={labelCls}>Received Qty</label>
-                            <input type="number" min="0" required value={item.received_quantity}
-                              onChange={e => updateItem(idx, 'received_quantity', e.target.value)}
-                              className={inputCls} />
-                          </div>
-                          <div>
-                            <label className={labelCls}>Available Qty</label>
-                            <input type="number" min="0" value={item.available_quantity}
-                              onChange={e => updateItem(idx, 'available_quantity', e.target.value)}
-                              className={inputCls} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               </div>

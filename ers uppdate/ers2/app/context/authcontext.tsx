@@ -23,6 +23,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Detect HTTPS at runtime so cookies work on both HTTP (local/server without SSL)
+// and HTTPS (production with SSL). Using NODE_ENV broke server deployments on HTTP.
+function buildCookieOptions() {
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  return {
+    expires: 7,
+    secure: isHttps,
+    sameSite: 'lax' as const,
+    path: '/',
+  };
+}
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -34,11 +46,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setToken(null);
     setUser(null);
     setRole(null);
-    Cookies.remove('virtue_token');
-    Cookies.remove('virtue_user');
-    Cookies.remove('user_id');
-    Cookies.remove('userId');
-    Cookies.remove('auth_token');  // also clear legacy token used by accountsDashboard pages
+    const removePath = { path: '/' };
+    Cookies.remove('virtue_token', removePath);
+    Cookies.remove('virtue_user', removePath);
+    Cookies.remove('user_id', removePath);
+    Cookies.remove('userId', removePath);
+    Cookies.remove('auth_token', removePath);
     delete axios.defaults.headers.common['Authorization'];
     router.replace('/login');
   }, [router]);
@@ -55,12 +68,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(parsedUser);
           setRole(parsedUser.role);
           axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-          
-          // Legacy support (Ensure cookies exist on page refresh)
+
+          // Re-set legacy cookies if missing (uses same options for consistency)
+          const cookieOpts = buildCookieOptions();
           const uid = String(parsedUser.user_id || parsedUser.id || "");
-          if (!Cookies.get('user_id')) Cookies.set('user_id', uid);
-          if (!Cookies.get('userId'))  Cookies.set('userId',  uid);
-          if (!Cookies.get('auth_token')) Cookies.set('auth_token', savedToken);
+          if (!Cookies.get('user_id'))    Cookies.set('user_id',    uid,        cookieOpts);
+          if (!Cookies.get('userId'))     Cookies.set('userId',     uid,        cookieOpts);
+          if (!Cookies.get('auth_token')) Cookies.set('auth_token', savedToken, cookieOpts);
         } catch (e) {
           logout();
         }
@@ -90,14 +104,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setRole(userRole);
 
     // Set Cookies
-    const cookieOptions = { 
-      expires: 7, 
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict' as const 
-    };
+    const cookieOptions = buildCookieOptions();
     Cookies.set('virtue_token', newToken, cookieOptions);
     Cookies.set('virtue_user', JSON.stringify(userData), cookieOptions);
-    // Legacy support for different dashbaord pages
+    // Legacy support for different dashboard pages
     const uid = String(userData.user_id || userData.id || "");
     Cookies.set('user_id',    uid, cookieOptions);
     Cookies.set('userId',     uid, cookieOptions);

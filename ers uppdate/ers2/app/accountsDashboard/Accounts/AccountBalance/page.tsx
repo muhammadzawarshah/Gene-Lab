@@ -42,7 +42,10 @@ export default function AccountBalance() {
       .finally(() => setLoading(false));
   }, []);
 
-  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2 });
+  // In accounting, amounts are always shown as absolute values.
+  // The column colour (green = debit-side, red = credit-side) communicates
+  // which side the balance is on — a raw minus sign is never used.
+  const fmt = (n: number) => Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2 });
 
   const grouped = TYPES.reduce((acc, t) => {
     acc[t] = data.filter(d => d.type === t);

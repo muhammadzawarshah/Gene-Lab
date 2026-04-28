@@ -56,7 +56,10 @@ export class PurchaseService {
     const po = await prisma.purchaseorder.findUnique({
       where: {
         po_id: Number(id) as any
-      }
+      },
+      include: {
+        party: true,
+      },
     })
 
     const pol = await prisma.purchaseorderline.findMany({
@@ -64,7 +67,8 @@ export class PurchaseService {
         po_id: Number(id) as any
       },
       include: {
-        product: true
+        product: true,
+        uom: true,
       }
     })
     return {

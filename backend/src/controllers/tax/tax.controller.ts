@@ -1,8 +1,67 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
 
+const MAX_FIXED_RATE = 200000000;
+const MAX_PERCENTAGE_RATE = 100;
+
+type TaxPayload = {
+  name: string;
+  rate: number;
+  type: string;
+  context: string;
+  gl_account_id: number | null;
+};
 
 export class TaxController {
+  private static buildTaxPayload(body: any): TaxPayload {
+    const name = String(body.name || '').trim();
+    const type = String(body.type || 'percentage').trim().toLowerCase();
+    const context = String(body.context || 'sale').trim().toLowerCase();
+    const rawRate = Number.parseFloat(String(body.rate ?? '').trim());
+
+    if (!name || Number.isNaN(rawRate)) {
+      throw Object.assign(new Error("Name and valid Rate are required."), { statusCode: 400 });
+    }
+
+    if (rawRate < 0) {
+      throw Object.assign(new Error("Rate negative nahi ho sakta."), { statusCode: 400 });
+    }
+
+    let normalizedRate = rawRate;
+
+    if (type === 'percentage') {
+      if (rawRate > MAX_PERCENTAGE_RATE) {
+        throw Object.assign(new Error("Percentage rate 0 se 100 ke darmiyan hona chahiye."), { statusCode: 400 });
+      }
+
+      // UI mein user 17 enter kare to DB mein 0.1700 store ho.
+      normalizedRate = rawRate > 1 ? rawRate / 100 : rawRate;
+    } else if (rawRate > MAX_FIXED_RATE) {
+      throw Object.assign(
+        new Error(`Fixed tax rate bohat bara hai. Maximum allowed value ${MAX_FIXED_RATE} hai.`),
+        { statusCode: 400 }
+      );
+    }
+
+    return {
+      name,
+      rate: Number(normalizedRate.toFixed(4)),
+      type,
+      context,
+      gl_account_id: body.gl_account_id ? Number(body.gl_account_id) : null
+    };
+  }
+
+  private static handleTaxError(error: any, res: Response) {
+    const statusCode = error.statusCode || (error.code === 'P2020' ? 400 : 500);
+    const message =
+      error.code === 'P2020'
+        ? `Rate database range se bahar hai. Fixed tax ke liye maximum ${MAX_FIXED_RATE} aur percentage ke liye 100 tak value use karein.`
+        : error.message || 'Tax operation failed.';
+
+    return res.status(statusCode).json({ success: false, message });
+  }
+
   // --- 1. GET ALL TAXES ---
   static async getTaxes(req: Request, res: Response) {
     try {
@@ -16,29 +75,17 @@ export class TaxController {
         data: taxes,
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return TaxController.handleTaxError(error, res);
     }
   }
 
   // --- 2. CREATE NEW TAX ---
   static async createTax(req: Request, res: Response) {
     try {
-      const { name, rate, type, context, gl_account_id } = req.body;
-
-      // Validation
-      if (!name || rate === undefined) {
-        return res.status(400).json({ success: false, message: "Name and Rate are required." });
-      }
+      const payload = TaxController.buildTaxPayload(req.body);
 
       const newTax = await prisma.tax.create({
-        data: {
-          name: name,
-          rate: Number(rate), // Decimal convert ho jayega
-          type: type || 'percentage',
-          context: context || 'sale',
-          // Agar frontend se gl_account_id nahi aa raha to null rahega
-          gl_account_id: gl_account_id ? Number(gl_account_id) : null
-        } as any
+        data: payload as any
       });
 
       return res.status(201).json({
@@ -46,7 +93,7 @@ export class TaxController {
         data: newTax,
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return TaxController.handleTaxError(error, res);
     }
   }
 
@@ -71,7 +118,7 @@ export class TaxController {
           message: "Cannot delete. This tax is currently linked to orders or invoices." 
         });
       }
-      return res.status(500).json({ success: false, message: error.message });
+      return TaxController.handleTaxError(error, res);
     }
   }
 
@@ -79,21 +126,11 @@ export class TaxController {
   static async updateTax(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { name, rate, type, context, gl_account_id } = req.body;
-
-      if (!name || rate === undefined) {
-        return res.status(400).json({ success: false, message: "Name and Rate are required." });
-      }
+      const payload = TaxController.buildTaxPayload(req.body);
 
       const updatedTax = await prisma.tax.update({
         where: { tax_id: Number(id) },
-        data: {
-          name: name,
-          rate: Number(rate),
-          type: type || 'percentage',
-          context: context || 'sale',
-          gl_account_id: gl_account_id ? Number(gl_account_id) : null
-        } as any
+        data: payload as any
       });
 
       return res.status(200).json({
@@ -101,7 +138,7 @@ export class TaxController {
         data: updatedTax,
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      return TaxController.handleTaxError(error, res);
     }
   }
 }

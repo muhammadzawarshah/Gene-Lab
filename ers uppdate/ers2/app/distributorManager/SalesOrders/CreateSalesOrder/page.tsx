@@ -1,170 +1,137 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { Toaster, toast } from 'sonner';
 import {
   Trash2, Layers, ChevronDown, Loader2,
-  Calculator, ReceiptIndianRupee,
-  Wallet, ShieldCheck, UserCircle2
+  Calculator, Wallet, ShieldCheck, UserCircle2, AlertTriangle
 } from 'lucide-react';
 
-// --- TYPES ---
-interface Customer  { party_id: string; name: string; }
-interface Category  { product_category_id: string; category: string; }
-interface Product   { product_id: string; name: string; }
-interface TaxItem   { tax_id: number; name: string; rate: number; type: string; context: string; }
-interface BatchItem {
-  batch_id: number;
-  batch_number: string;
-  expiry_date: string | null;
-  manufacturing_date: string | null;
-  batchitem: { product_id: string; available_quantity: number }[];
+interface Customer { party_id: string; name: string; }
+interface Category { product_category_id: string; category: string; }
+interface Product  {
+  product_id: string;
+  name: string;
+  uom_id: number;
+  default_sale_price?: number;
 }
-interface SalesItem {
+interface SOItem {
   category_id: string;
   product_id: string;
-  price_type: string;
-  batch_id: number | null;
-  batch_no: string;
-  expiry: string;
+  uom_id: number;
   total_unit: number;
-  approved_rate: number;
+  sale_price: number;
   amount: number;
 }
 
-const emptyRow = (): SalesItem => ({
-  category_id: '', product_id: '', price_type: '',
-  batch_id: null, batch_no: '', expiry: '',
-  total_unit: 0, approved_rate: 0, amount: 0,
+const emptyRow = (): SOItem => ({
+  category_id: '', product_id: '',
+  uom_id: 0, total_unit: 0, sale_price: 0, amount: 0,
 });
 
 export default function CreateSalesOrder() {
-  const [isSubmitting,    setIsSubmitting]    = useState(false);
-  const [customers,       setCustomers]       = useState<Customer[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedPartyId, setSelectedPartyId] = useState('');
-  const [categories,      setCategories]      = useState<Category[]>([]);
-  const [productsMap,     setProductsMap]     = useState<Record<string, Product[]>>({});
-  const [taxes,           setTaxes]           = useState<TaxItem[]>([]);
-  const [selectedTax,     setSelectedTax]     = useState<TaxItem | null>(null);
-  const [batches,         setBatches]         = useState<BatchItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [productsMap, setProductsMap] = useState<Record<string, Product[]>>({});
+  const [stockMap, setStockMap] = useState<Record<string, number>>({});
 
   const currentUserId = Cookies.get('userId') || 'ADMIN_USER';
   const token = Cookies.get('auth_token');
 
-  const [rows, setRows] = useState<SalesItem[]>([emptyRow(), emptyRow(), emptyRow()]);
+  const [rows, setRows] = useState<SOItem[]>([emptyRow(), emptyRow(), emptyRow()]);
 
-  // ── Fetch all reference data on mount ────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     const h = { Authorization: `Bearer ${token}` };
 
-    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/party/customers`, { headers: h })
-      .then(r => { const d = r.data.customers || r.data.data || r.data; setCustomers(Array.isArray(d) ? d : []); })
-      .catch(() => toast.error("Customer fetch failed"));
+    Promise.allSettled([
+      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/party/customers`, { headers: h }),
+      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/category/`, { headers: h }),
+      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/stock/combined`, { headers: h })
+    ]).then(([customerRes, categoryRes, stockRes]) => {
+      if (customerRes.status === 'fulfilled') {
+        const customerData = customerRes.value.data.customers || customerRes.value.data.data || customerRes.value.data;
+        setCustomers(Array.isArray(customerData) ? customerData : []);
+      } else {
+        setCustomers([]);
+        toast.error("Customers load nahi ho sake.");
+      }
 
-    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/category/`, { headers: h })
-      .then(r => setCategories(r.data.category || []))
-      .catch(() => toast.error("Category fetch failed"));
+      if (categoryRes.status === 'fulfilled') {
+        setCategories(categoryRes.value.data.category || []);
+      } else {
+        setCategories([]);
+        toast.error("Categories load nahi ho sakin.");
+      }
 
-    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/finance/taxes`, { headers: h })
-      .then(r => setTaxes(r.data.data || []))
-      .catch(() => {});
-
-    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/batch`, { headers: h })
-      .then(r => setBatches(Array.isArray(r.data) ? r.data : r.data.data || []))
-      .catch(() => {});
+      if (stockRes.status === 'fulfilled') {
+        const nextMap = (stockRes.value.data.data || []).reduce((acc: Record<string, number>, item: any) => {
+          acc[item.product_id] = Number(item.available || 0);
+          return acc;
+        }, {});
+        setStockMap(nextMap);
+      } else {
+        setStockMap({});
+        toast.error("Combined stock load nahi ho saka.");
+      }
+    }).catch(() => toast.error("Initial sales data fetch failed"));
   }, [token]);
 
-  // ── Fetch products by category (cached) ──────────────────────────────────
   const fetchProducts = async (catId: string) => {
     if (!catId || productsMap[catId]) return;
     try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/product/category/${catId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/product/category/${catId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setProductsMap(prev => ({ ...prev, [catId]: res.data }));
-    } catch { toast.error("Product fetch failed"); }
-  };
-
-  // ── Fetch price by product + price type ──────────────────────────────────
-  const fetchPrice = async (index: number, productId: string, priceType: string) => {
-    if (!productId || !priceType) return;
-    try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/productprice/lookup`, {
-        params: { product_id: productId, price_type: priceType },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.data.success && res.data.data) {
-        const rate = parseFloat(res.data.data.unit_price);
-        setRows(prev => {
-          const next = [...prev];
-          next[index] = { ...next[index], approved_rate: rate, amount: (next[index].total_unit || 0) * rate };
-          return next;
-        });
-        toast.success(`${priceType} price: PKR ${rate.toLocaleString()}`);
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Price lookup failed");
+    } catch {
+      toast.error("Product fetch failed");
     }
   };
 
-  // ── Per-row batch list filtered by product ───────────────────────────────
-  const getBatchesForProduct = (productId: string) =>
-    batches.filter(b => b.batchitem.some(bi => bi.product_id === productId));
-
-  // ── Row change handler ────────────────────────────────────────────────────
-  const handleInputChange = (index: number, field: keyof SalesItem, value: any) => {
+  const handleInputChange = (index: number, field: keyof SOItem, value: any) => {
     setRows(prev => {
-      const rows = [...prev];
-      const row = { ...rows[index], [field]: value };
+      const updatedRows = [...prev];
+      const row = { ...updatedRows[index], [field]: value };
 
       if (field === 'category_id') {
-        row.product_id = ''; row.price_type = '';
-        row.batch_id = null; row.batch_no = ''; row.expiry = '';
-        row.approved_rate = 0; row.amount = 0;
+        row.product_id = '';
+        row.uom_id = 0;
+        row.sale_price = 0;
+        row.amount = 0;
+        row.total_unit = 0;
         fetchProducts(value);
       }
 
       if (field === 'product_id') {
-        row.price_type = '';
-        row.batch_id = null; row.batch_no = ''; row.expiry = '';
-        row.approved_rate = 0; row.amount = 0;
+        const selectedProduct = (productsMap[row.category_id] || []).find((product) => product.product_id === value);
+        row.uom_id = selectedProduct?.uom_id || 0;
+        row.sale_price = Number(selectedProduct?.default_sale_price || 0);
+        row.total_unit = 0;
+        row.amount = 0;
       }
 
-      if (field === 'price_type' && value && row.product_id) {
-        rows[index] = row;
-        setRows([...rows]);
-        fetchPrice(index, row.product_id, value);
-        return rows;
+      if (field === 'total_unit' || field === 'sale_price') {
+        row.amount = (Number(row.total_unit) || 0) * (Number(row.sale_price) || 0);
       }
 
-      if (field === 'total_unit' || field === 'approved_rate') {
-        row.amount = (Number(row.total_unit) || 0) * (Number(row.approved_rate) || 0);
+      updatedRows[index] = row;
+
+      const availableQty = row.product_id ? Number(stockMap[row.product_id] || 0) : 0;
+      if (field === 'total_unit' && row.product_id && Number(row.total_unit) > availableQty) {
+        toast.error(`Stock kam hai. Available: ${availableQty}`);
       }
 
-      rows[index] = row;
-
-      if (index === rows.length - 1 && field === 'product_id' && value) {
-        return [...rows, emptyRow()];
+      if (index === prev.length - 1 && field === 'product_id' && value) {
+        return [...updatedRows, emptyRow()];
       }
-      return rows;
-    });
-  };
 
-  // ── Batch select handler ──────────────────────────────────────────────────
-  const handleBatchSelect = (index: number, batchId: number | null) => {
-    const batch = batches.find(b => b.batch_id === batchId) ?? null;
-    setRows(prev => {
-      const next = [...prev];
-      next[index] = {
-        ...next[index],
-        batch_id: batch?.batch_id ?? null,
-        batch_no: batch?.batch_number ?? '',
-        expiry:   batch?.expiry_date ? batch.expiry_date.split('T')[0] : '',
-      };
-      return next;
+      return updatedRows;
     });
   };
 
@@ -172,34 +139,40 @@ export default function CreateSalesOrder() {
     if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
   };
 
-  // ── Totals ────────────────────────────────────────────────────────────────
   const grossTotal = useMemo(() => rows.reduce((s, r) => s + (r.amount || 0), 0), [rows]);
-  const computedTaxAmount = useMemo(() => {
-    if (!selectedTax) return 0;
-    return selectedTax.type === 'percentage' ? (grossTotal * selectedTax.rate) / 100 : selectedTax.rate;
-  }, [grossTotal, selectedTax]);
-  const finalPayable = useMemo(() => grossTotal + computedTaxAmount, [grossTotal, computedTaxAmount]);
+  const stockIssues = useMemo(() => {
+    return rows
+      .filter((row) => row.product_id && Number(row.total_unit) > Number(stockMap[row.product_id] || 0))
+      .map((row) => ({
+        product_id: row.product_id,
+        requested: Number(row.total_unit),
+        available: Number(stockMap[row.product_id] || 0)
+      }));
+  }, [rows, stockMap]);
 
-  // ── Submit ────────────────────────────────────────────────────────────────
   const handleFinalize = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPartyId) return toast.error("Pehle customer select karein.");
+
     const validItems = rows.filter(r => r.product_id !== '');
     if (!validItems.length) return toast.error("Kam az kam ek product select karein.");
+    if (stockIssues.length) return toast.error("Stock issues resolve kiye baghair order create nahi ho sakta.");
 
     setIsSubmitting(true);
     try {
       await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/distribution/sales-orders`, {
         customerId: selectedPartyId,
         createdBy: currentUserId,
-        items: validItems,
-        financials: { grossTotal, taxId: selectedTax?.tax_id ?? null, taxAmount: computedTaxAmount, netTotal: finalPayable }
+        items: validItems.map(r => ({
+          ...r,
+          approved_rate: r.sale_price,
+        })),
+        financials: { grossTotal, taxId: null, taxAmount: 0, netTotal: grossTotal }
       }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast.success("Sales order submitted", { icon: <ShieldCheck className="text-emerald-500" /> });
       setSelectedPartyId('');
       setRows([emptyRow(), emptyRow(), emptyRow()]);
-      setSelectedTax(null);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Submission failed");
     } finally {
@@ -214,7 +187,6 @@ export default function CreateSalesOrder() {
     <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
       <Toaster position="top-right" theme="dark" richColors />
 
-      {/* HEADER & CUSTOMER SELECT */}
       <div className="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-8 border-l-8 border-blue-600 pl-6">
         <div className="flex-1">
           <h1 className="text-6xl font-black text-white uppercase tracking-tighter italic leading-none">
@@ -225,8 +197,7 @@ export default function CreateSalesOrder() {
           </p>
         </div>
 
-        <div className="w-full lg:w-96 relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000" />
+        <div className="w-full lg:w-[560px]">
           <div className="relative bg-[#020617] rounded-2xl border border-white/10 p-4">
             <label className="text-[9px] font-black text-blue-500 uppercase mb-2 block tracking-widest italic">Target Customer Account</label>
             <div className="relative">
@@ -236,7 +207,9 @@ export default function CreateSalesOrder() {
                 onChange={e => setSelectedPartyId(e.target.value)}
               >
                 <option value="">Choose Customer Account...</option>
-                {customers.map(c => <option key={c.party_id} value={c.party_id} className="bg-slate-900">{c.name}</option>)}
+                {customers.map(c => (
+                  <option key={c.party_id} value={c.party_id} className="bg-slate-900">{c.name}</option>
+                ))}
               </select>
               <UserCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={20} />
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={16} />
@@ -245,91 +218,84 @@ export default function CreateSalesOrder() {
         </div>
       </div>
 
+      {stockIssues.length > 0 && (
+        <div className="mb-8 rounded-3xl border border-red-500/20 bg-red-500/10 px-6 py-5 text-sm text-red-200">
+          <div className="flex items-center gap-3 font-black uppercase tracking-widest text-[11px]">
+            <AlertTriangle size={16} className="text-red-400" />
+            Stock Alert
+          </div>
+          <div className="mt-3 space-y-2">
+            {stockIssues.map((issue) => (
+              <p key={issue.product_id}>
+                Product `{issue.product_id}` ke liye requested qty `{issue.requested}` hai jab ke available `{issue.available}` hai.
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleFinalize} className="bg-[#020617] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse min-w-[1350px]">
+          <table className="w-full border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-white/[0.02]">
                 <th className="w-12 p-4 text-center text-[10px] font-black text-slate-600 uppercase tracking-widest italic">S#</th>
                 <th className={thCls}>Category</th>
                 <th className={thCls}>Product</th>
-                <th className={thCls}>Price Type</th>
-                <th className={thCls}>Batch</th>
-                <th className={thCls}>Expiry</th>
+                <th className={thCls}>Available Stock</th>
                 <th className={thCls}>Qty</th>
-                <th className={thCls}>Rate</th>
+                <th className={`${thCls} text-amber-400`}>Sale Price</th>
                 <th className={thCls}>Amount</th>
                 <th className="w-12" />
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.map((row, index) => {
-                const productBatches = row.product_id ? getBatchesForProduct(row.product_id) : [];
+                const availableQty = row.product_id ? Number(stockMap[row.product_id] || 0) : 0;
+                const hasShortage = row.product_id && Number(row.total_unit) > availableQty;
+
                 return (
-                  <tr key={`row-${index}`} className="group hover:bg-blue-600/[0.02] transition-all">
+                  <tr key={`row-${index}`} className={`group transition-all ${hasShortage ? 'bg-red-500/[0.04]' : 'hover:bg-blue-600/[0.02]'}`}>
                     <td className="p-4 text-center font-black text-slate-700 text-xs italic">{index + 1}</td>
 
-                    {/* Category */}
                     <td className="p-2 w-44">
                       <select className={inpCls} value={row.category_id}
                         onChange={e => handleInputChange(index, 'category_id', e.target.value)}>
                         <option value="">Category</option>
-                        {categories.map(c => <option key={c.product_category_id} value={c.product_category_id} className="bg-[#0f172a]">{c.category}</option>)}
+                        {categories.map(c => (
+                          <option key={c.product_category_id} value={c.product_category_id} className="bg-[#0f172a]">{c.category}</option>
+                        ))}
                       </select>
                     </td>
 
-                    {/* Product */}
-                    <td className="p-2 w-48">
+                    <td className="p-2 w-52">
                       <select className={inpCls + " disabled:opacity-30"} value={row.product_id}
                         disabled={!row.category_id}
                         onChange={e => handleInputChange(index, 'product_id', e.target.value)}>
                         <option value="">Product</option>
-                        {(productsMap[row.category_id] || []).map(p => <option key={p.product_id} value={p.product_id} className="bg-[#0f172a]">{p.name}</option>)}
+                        {(productsMap[row.category_id] || []).map(p => (
+                          <option key={p.product_id} value={p.product_id} className="bg-[#0f172a]">{p.name}</option>
+                        ))}
                       </select>
                     </td>
 
-                    {/* Price Type */}
-                    <td className="p-2 w-36">
-                      <select className={inpCls + " disabled:opacity-30"} value={row.price_type}
-                        disabled={!row.product_id}
-                        onChange={e => handleInputChange(index, 'price_type', e.target.value)}>
-                        <option value="">Price Type</option>
-                        <option value="RETAIL"      className="bg-[#0f172a]">Retail</option>
-                        <option value="WHOLESALE"   className="bg-[#0f172a]">Wholesale</option>
-                        <option value="DISTRIBUTER" className="bg-[#0f172a]">Distributor</option>
-                      </select>
+                    <td className="p-4 text-center">
+                      <span className={`rounded-full px-3 py-1 text-[11px] font-black ${hasShortage ? 'bg-red-500/10 text-red-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
+                        {row.product_id ? availableQty : '--'}
+                      </span>
                     </td>
 
-                    {/* Batch dropdown */}
-                    <td className="p-2 w-44">
-                      <select
-                        className={inpCls + " disabled:opacity-30"}
-                        disabled={!row.product_id}
-                        value={row.batch_id ?? ''}
-                        onChange={e => handleBatchSelect(index, e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">Select Batch</option>
-                        {productBatches.map(b => {
-                          const avail = b.batchitem.find(bi => bi.product_id === row.product_id)?.available_quantity ?? 0;
-                          return (
-                            <option key={b.batch_id} value={b.batch_id} className="bg-[#0f172a]">
-                              {b.batch_number} | Avail: {avail}
-                            </option>
-                          );
-                        })}
-                      </select>
+                    <td className="p-2 w-28">
+                      <input type="number" className={`${inpCls} text-center ${hasShortage ? 'border-red-500 text-red-300' : ''}`} value={row.total_unit || ''}
+                        onChange={e => handleInputChange(index, 'total_unit', e.target.value)} />
                     </td>
 
-                    {/* Expiry (readonly, auto-filled) */}
                     <td className="p-2 w-32">
-                      <input type="text" readOnly
-                        className={inpCls + " text-center text-slate-400 cursor-default"}
-                        value={row.expiry || '—'}
-                      />
+                      <input type="number" placeholder="0.00" className={inpCls + " text-right text-amber-400 font-mono"}
+                        value={row.sale_price || ''}
+                        onChange={e => handleInputChange(index, 'sale_price', e.target.value)} />
                     </td>
 
-                    <td className="p-2 w-24"><input type="number" className={inpCls + " text-center"} value={row.total_unit || ''} onChange={e => handleInputChange(index, 'total_unit', e.target.value)} /></td>
-                    <td className="p-2 w-28"><input type="number" className={inpCls + " text-right text-blue-400 font-mono"} value={row.approved_rate || ''} onChange={e => handleInputChange(index, 'approved_rate', e.target.value)} /></td>
                     <td className="p-4 text-right text-xs font-black text-white italic">{row.amount.toLocaleString()}</td>
                     <td className="p-2">
                       <button type="button" onClick={() => removeRow(index)}
@@ -344,63 +310,20 @@ export default function CreateSalesOrder() {
           </table>
         </div>
 
-        {/* SUMMARY */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 p-10 bg-white/[0.01] border-t border-white/5">
-          <div className="md:col-span-4 space-y-6">
-            <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">Adjustment Engine</h3>
-            <div className="relative">
-              <select
-                className={inpCls + " pl-10 h-14 bg-slate-900 text-sm"}
-                value={selectedTax?.tax_id ?? ''}
-                onChange={e => setSelectedTax(taxes.find(t => t.tax_id === Number(e.target.value)) || null)}
-              >
-                <option value="">— No Tax —</option>
-                {taxes.map(t => (
-                  <option key={t.tax_id} value={t.tax_id} className="bg-[#0f172a]">
-                    {t.name} ({t.rate}{t.type === 'percentage' ? '%' : ' PKR'})
-                  </option>
-                ))}
-              </select>
-              <ReceiptIndianRupee className="absolute left-3 top-4 text-emerald-600 pointer-events-none" size={20} />
-            </div>
-          </div>
-
-          <div className="md:col-span-3" />
-
-          <div className="md:col-span-5">
-            <div className="bg-slate-900/50 rounded-[2rem] p-8 border border-white/5 space-y-4 shadow-inner">
-              <div className="flex justify-between items-center text-slate-500 text-[10px] font-bold uppercase tracking-widest italic">
-                <span>Gross Subtotal</span>
-                <span className="text-white">PKR {grossTotal.toLocaleString()}</span>
-              </div>
-              {selectedTax && (
-                <div className="flex justify-between items-center text-emerald-500 text-[10px] font-bold uppercase tracking-widest border-b border-white/10 pb-3">
-                  <span>{selectedTax.name} ({selectedTax.rate}{selectedTax.type === 'percentage' ? '%' : ' PKR'})</span>
-                  <span>+ PKR {computedTaxAmount.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-white font-black text-sm uppercase italic">Final Payable</span>
-                <span className="text-4xl font-black text-blue-500 italic tracking-tighter">
-                  PKR {finalPayable.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* FOOTER */}
         <div className="p-10 bg-[#020617] border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4 bg-white/5 px-8 py-4 rounded-full border border-white/5">
             <Calculator className="text-blue-500" size={20} />
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest italic">Logic Engine Active</span>
+            <div>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Gross Total</p>
+              <p className="text-sm font-black text-white">PKR {grossTotal.toLocaleString()}</p>
+            </div>
           </div>
           <div className="flex gap-4 w-full md:w-auto">
-            <button type="button" onClick={() => window.location.reload()}
+            <button type="button" onClick={() => setRows([emptyRow(), emptyRow(), emptyRow()])}
               className="flex-1 md:flex-none bg-white/5 text-slate-500 font-black px-10 py-5 rounded-2xl uppercase text-[10px] tracking-widest border border-white/5 hover:bg-rose-500/10 hover:text-rose-500 transition-all">
               Clear Form
             </button>
-            <button type="submit" disabled={isSubmitting}
+            <button type="submit" disabled={isSubmitting || stockIssues.length > 0}
               className="flex-2 md:flex-none bg-blue-600 hover:bg-blue-500 text-white font-black px-16 py-5 rounded-2xl uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20 disabled:opacity-50">
               {isSubmitting ? <Loader2 className="animate-spin" /> : <><Wallet size={18} /> Deploy Sales Order</>}
             </button>

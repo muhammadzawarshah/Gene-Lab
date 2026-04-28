@@ -24,10 +24,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var theme = localStorage.getItem('gene-theme');
+                  if (theme === 'light') {
+                    document.documentElement.classList.add('theme-light');
+                  }
+                } catch (error) {}
+              })();
+            `,
+          }}
+        />
         <AuthProvider>
           {children}
         </AuthProvider>

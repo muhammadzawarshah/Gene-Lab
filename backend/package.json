@@ -1,16 +1,19 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "This was Luqman Sabzi Mandi AI  Voice controlled system developed by Muhammad zawar shah and Muhammad Haris",
-  "main": "src/main.ts",
+  "description": "Luqman Sabzi Mandi AI Voice controlled system",
+  "main": "src/server.ts",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node-dev src/server.ts",
-    "start": "node dist/server.js"
+    "dev": "node --loader ts-node/esm src/server.ts",
+    "build": "prisma generate && tsc",
+    "start": "node dist/server.js",
+    "vercel-build": "prisma generate && tsc",
+    "postinstall": "prisma generate"
   },
-  "author": "Muhammad Zawar Shah and Muhammad Haris",
-  "license": "ISC",
+  "engines": {
+    "node": ">=20.x"
+  },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
@@ -26,7 +29,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "pg": "^8.16.3",
+    "pg": "^8.20.0",
     "uuid": "^13.0.0",
     "zod": "^4.2.1"
   },
@@ -39,8 +42,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/multer": "^2.0.0",
-    "@types/node": "^25.0.10",
-    "@types/pg": "^8.16.0",
+    "@types/node": "^25.5.0",
+    "@types/pg": "^8.20.0",
     "@types/swagger-jsdoc": "^6.0.4",
     "nodemon": "^3.1.11",
     "prisma": "^7.2.0",
@@ -50,7 +53,6 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
-  "keywords": [],
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   }

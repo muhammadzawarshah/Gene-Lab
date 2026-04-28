@@ -66,7 +66,7 @@ export default function InvoiceStatus() {
         setStats(response.data.metrics || { fullyInvoiced: 0, pending: 0, disputed: 0 });
         
         if (!loading) {
-          toast.success("NEXUS SYNC COMPLETE", { description: "Invoice logs synchronized." });
+          toast.success("Gene SYNC COMPLETE", { description: "Invoice logs synchronized." });
         }
       }
     } catch (err: any) {

@@ -39,18 +39,31 @@ export default function ChangePassword() {
     }
   });
 
-  // --- Password Strength Logic ---
-  const getStrength = useCallback(() => {
+  // --- Password Validation Logic ---
+  // Returns true if valid: >=8 chars, 1 upper, 1 lower, 1 num, 1 special
+  const isValidPassword = useCallback(() => {
+    const pw = formData.new;
+    if (pw.length < 8) return false;
+    if (!/[A-Z]/.test(pw)) return false;
+    if (!/[a-z]/.test(pw)) return false;
+    if (!/[0-9]/.test(pw)) return false;
+    if (!/[^A-Za-z0-9]/.test(pw)) return false;
+    return true;
+  }, [formData.new]);
+
+  // For visual meter only (0 to 4 steps)
+  const getStrengthMeter = useCallback(() => {
     if (formData.new.length === 0) return 0;
     let strength = 0;
-    if (formData.new.length >= 10) strength += 1; // Minimum 10 chars for safety
-    if (/[A-Z]/.test(formData.new)) strength += 1;
+    if (formData.new.length >= 8) strength += 1;
+    if (/[A-Z]/.test(formData.new) && /[a-z]/.test(formData.new)) strength += 1;
     if (/[0-9]/.test(formData.new)) strength += 1;
     if (/[^A-Za-z0-9]/.test(formData.new)) strength += 1;
     return strength;
   }, [formData.new]);
 
-  const strength = getStrength();
+  const strength = getStrengthMeter();
+  const isValid = isValidPassword();
 
   // --- Secure Submission ---
   const handleUpdate = async (e: React.FormEvent) => {
@@ -60,8 +73,8 @@ export default function ChangePassword() {
     if (formData.new !== formData.confirm) {
       return toast.error("VALIDATION ERROR", { description: "New access keys do not match." });
     }
-    if (strength < 3) {
-      return toast.warning("SECURITY RISK", { description: "Password complexity index too low." });
+    if (!isValid) {
+      return toast.warning("SECURITY RISK", { description: "Password must be at least 8 chars with uppercase, lowercase, number, and special character." });
     }
     if (!currentUserId) {
       return toast.error("AUTH_FAILURE", { description: "Unauthorized access detected." });
@@ -169,8 +182,8 @@ export default function ChangePassword() {
                 />
               ))}
             </div>
-            <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest mt-2 flex items-center gap-2 italic">
-               <Activity size={10} /> Complexity Index: {strength === 0 ? 'Empty' : strength <= 2 ? 'Weak' : strength === 3 ? 'Medium' : 'Ultra-Secure'}
+            <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest mt-2 flex flex-col gap-1 italic">
+               <span className="flex items-center gap-2"><Activity size={10} /> Requirements: 8+ chars, Upper, Lower, Num, Special</span>
             </p>
           </div>
 
@@ -197,7 +210,7 @@ export default function ChangePassword() {
 
           <button 
             type="submit"
-            disabled={loading || strength < 3 || formData.new !== formData.confirm}
+            disabled={loading || !isValid || formData.new !== formData.confirm}
             className="group w-full relative mt-8 overflow-hidden rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-400 group-hover:scale-105 transition-transform duration-500" />

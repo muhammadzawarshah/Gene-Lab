@@ -5,12 +5,26 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { 
   Percent, ShieldCheck, Plus, Trash2, 
-  Tag, Database, Settings2, Activity, Search, X, Edit3
+  Tag, Database, Settings2, Activity, Search, X, Edit3, AlertTriangle
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 
 // --- SECURITY: Anti-XSS Sanitization ---
 const sanitize = (str: string) => str.replace(/[<>'"/\\;]/g, "").trim();
+const formatRateForDisplay = (rate: unknown, type: string) => {
+  const numericRate = Number(rate);
+
+  if (!Number.isFinite(numericRate)) {
+    return "---";
+  }
+
+  if (type === "percentage") {
+    const percentValue = numericRate * 100;
+    return `${percentValue.toFixed(percentValue % 1 === 0 ? 0 : 2)}%`;
+  }
+
+  return numericRate.toFixed(numericRate % 1 === 0 ? 0 : 4);
+};
 
 export default function TaxManagement() {
   const authToken = Cookies.get('auth_token');
@@ -21,6 +35,7 @@ export default function TaxManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
+  const [pageAlert, setPageAlert] = useState<{ type: "error" | "success"; message: string } | null>(null);
 
   // Form State (Aligned with Backend: rate as string for input, then parsed)
   const [formData, setFormData] = useState({
@@ -36,12 +51,12 @@ export default function TaxManagement() {
       const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/finance/taxes`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      console.log(res.data)
-      // Backend returns { success: true, data: [...] }
+      setPageAlert(null);
       setTaxes(res.data.data || []);
-    } catch (err) {
-      console.error("Fetch error");
-      toast.error("Failed to load registry.");
+    } catch (err: any) {
+      const message = err.response?.data?.message || "Failed to load registry.";
+      setPageAlert({ type: "error", message });
+      toast.error(message);
     }
   }, [authToken, userId]);
 
@@ -64,6 +79,25 @@ export default function TaxManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || formData.rate === "") return toast.error("Please fill all fields.");
+
+    const parsedRate = Number.parseFloat(formData.rate);
+    if (Number.isNaN(parsedRate) || parsedRate < 0) {
+      const message = "Valid rate enter karein. Negative value allowed nahi hai.";
+      setPageAlert({ type: "error", message });
+      return toast.error(message);
+    }
+
+    if (formData.type === "percentage" && parsedRate > 100) {
+      const message = "Percentage rate 0 se 100 ke darmiyan hona chahiye.";
+      setPageAlert({ type: "error", message });
+      return toast.error(message);
+    }
+
+    if (formData.type === "fixed" && parsedRate > 200000000) {
+      const message = "Fixed tax rate 200000000 se zyada nahi ho sakta.";
+      setPageAlert({ type: "error", message });
+      return toast.error(message);
+    }
 
     setSubmitting(true);
     const tId = toast.loading(editId ? "Updating Tax Rule..." : "Authorizing Tax Rule...");
@@ -89,11 +123,14 @@ export default function TaxManagement() {
         toast.success(`${formData.name} Synced Successfully!`, { id: tId });
       }
 
+      setPageAlert({ type: "success", message: `Tax rule "${formData.name}" successfully save ho gayi.` });
       setFormData({ name: "", rate: "", type: "percentage", context: "sale" });
       setEditId(null);
       fetchTaxes(); 
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Action Unauthorized", { id: tId });
+      const message = err.response?.data?.message || "Action Unauthorized";
+      setPageAlert({ type: "error", message });
+      toast.error(message, { id: tId });
     } finally {
       setSubmitting(false);
     }
@@ -104,16 +141,18 @@ export default function TaxManagement() {
     setEditId(t.tax_id);
     setFormData({
       name: t.name,
-      rate: t.rate.toString(),
+      rate: t.type === "percentage" ? String(Number(t.rate) * 100) : t.rate.toString(),
       type: t.type,
       context: t.context
     });
+    setPageAlert(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelEdit = () => {
     setEditId(null);
     setFormData({ name: "", rate: "", type: "percentage", context: "sale" });
+    setPageAlert(null);
   };
 
   // --- 5. SECURE DELETE ---
@@ -125,10 +164,12 @@ export default function TaxManagement() {
       await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/finance/taxes/${tax_id}`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
+      setPageAlert({ type: "success", message: `${name} delete ho gaya.` });
       toast.success("Record Deleted.", { id: tId });
       fetchTaxes();
     } catch (err: any) {
       const msg = err.response?.data?.message || "Delete Failed.";
+      setPageAlert({ type: "error", message: msg });
       toast.error(msg, { id: tId });
     }
   };
@@ -167,6 +208,17 @@ export default function TaxManagement() {
           {/* FORM (LEFT) */}
           <div className="lg:col-span-4">
             <div className="bg-[#0f172a]/40 border border-white/5 p-10 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden group">
+              {pageAlert && (
+                <div className={`mb-8 flex items-start gap-3 rounded-2xl border px-4 py-4 text-sm ${
+                  pageAlert.type === "error"
+                    ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                }`}>
+                  <AlertTriangle size={18} className={pageAlert.type === "error" ? "text-rose-400" : "text-emerald-400"} />
+                  <p>{pageAlert.message}</p>
+                </div>
+              )}
+
               <h3 className="text-white font-black mb-10 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em]">
                 <div className="flex items-center gap-3">
                   {editId ? <Edit3 size={16} className="text-blue-500" /> : <Plus size={16} className="text-emerald-500" />} 
@@ -193,6 +245,9 @@ export default function TaxManagement() {
                     type="number" step="0.0001" className={inputClass} placeholder="0.00"
                     value={formData.rate} onChange={(e) => setFormData({...formData, rate: e.target.value})}
                   />
+                  <p className="mt-2 ml-1 text-[10px] font-bold tracking-[0.15em] uppercase text-slate-500">
+                    Percentage ke liye `17` likhein. Fixed amount ke liye maximum `200000000` allow hai.
+                  </p>
                 </div>
                 <div>
                     <label className={labelClass}>Type</label>
@@ -279,8 +334,7 @@ export default function TaxManagement() {
                           </div>
                         </td>
                         <td className="px-8 py-6 font-mono text-emerald-400 font-black italic text-sm">
-                          {t.rate}
-                          {t.type === 'percentage' ? '%' : ''}
+                          {formatRateForDisplay(t.rate, t.type)}
                         </td>
                         <td className="px-8 py-6">
                           <span className="text-[9px] bg-white/5 text-slate-400 px-3 py-1 rounded-lg border border-white/5 font-black uppercase tracking-tighter">

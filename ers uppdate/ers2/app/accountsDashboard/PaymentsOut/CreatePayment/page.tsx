@@ -38,6 +38,14 @@ export default function CreatePayment() {
     headers: { Authorization: `Bearer ${token}` }
   }), [token, API_BASE]);
 
+  const openInvoiceOptions = useMemo(() => {
+    return invoiceList.filter((invoice: any) => {
+      const balanceAmount = Number(invoice.balanceAmount ?? 0);
+      const normalizedStatus = String(invoice.status || "").toUpperCase();
+      return balanceAmount > 0 && normalizedStatus !== "PAID";
+    });
+  }, [invoiceList]);
+
   // 1. FETCH INVOICES (With Double-Nesting Fix)
   const fetchInvoices = useCallback(async () => {
     if (!token) return;
@@ -150,7 +158,7 @@ export default function CreatePayment() {
               onChange={(e) => setSelectedInvoiceId(e.target.value)}
             >
               <option value="">-- SELECT UNPAID INVOICE --</option>
-              {Array.isArray(invoiceList) && invoiceList.map((inv) => (
+              {Array.isArray(openInvoiceOptions) && openInvoiceOptions.map((inv: any) => (
                 <option key={inv.id} value={inv.id}>
                   {inv.invoiceNumber} | {inv.supplierName} | Bal: {inv.balanceAmount}
                 </option>

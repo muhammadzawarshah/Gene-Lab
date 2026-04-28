@@ -18,7 +18,7 @@ import ProductPriceRoute from './productprice.route.js';
 import BatchRoute from './batch.route.js';
 import DistrictRoute from './district.route.js';
 import accountsRoutes from './accounts.routes.js';
-import { v1 } from 'uuid';
+import notificationRoutes from './notification.routes.js';
 const v1Router = Router();
 
 v1Router.use('/distribution', distributionroute);
@@ -34,10 +34,11 @@ v1Router.use('/warehouse', Warehouse);
 v1Router.use('/province', Province);
 v1Router.use('/inventory', Inventory);
 v1Router.use('/grn', Grn);
-v1Router.use('/Stock', Stock);
+v1Router.use('/stock', Stock);
 v1Router.use('/productprice', ProductPriceRoute);
 v1Router.use('/batch', BatchRoute);
 v1Router.use('/district', DistrictRoute);
 v1Router.use('/accounts', accountsRoutes);
+v1Router.use('/notifications', notificationRoutes);
 
 export default v1Router;

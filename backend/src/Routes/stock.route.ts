@@ -14,6 +14,11 @@ router.get(
   StockController.getStockByWarehouse
 );
 
+router.get(
+  '/combined',
+  StockController.getCombinedStock
+);
+
 /**
  * @route   POST /api/v1/stock/reserve
  * @desc    Order ke liye stock reserve karein (Transaction based)
@@ -27,8 +32,8 @@ router.get(
 // router.get('/movements', StockController.getStockMovements);
 
 
-router.post(
-  '/move', 
-  StockController.stockTransfer
-);
+router.post('/move', StockController.stockTransfer);
+router.get('/alerts', StockController.getAlerts);
+router.put('/limits/:stock_item_id', StockController.updateLimits);
+
 export default router;

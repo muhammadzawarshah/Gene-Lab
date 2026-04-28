@@ -1,6 +1,6 @@
 // src/routes/finance.routes.ts
 import { Router } from 'express';
-import { postInvoice, postPayment , grnInvoice , getinvoice , getspecificinvoice , getpayments , getpurchaseinvoices, createpurchasepayment ,specificpurchaseinvoice , specificcustomerinvoice , getcustomerinvoices ,specificcustomerpayment, getLedger, getLedgerLines, getAccountBalances, getPaymentAllocations, getAccountsDashboard, getPartySummary, getPartyLedger } from '../controllers/paymentsandinvoicing/finance.controller.js';
+import { postInvoice, postPayment , grnInvoice , getAvailablePurchaseInvoiceGrns, getAvailableSaleInvoiceDns, getinvoice , getspecificinvoice , getpayments , getpurchaseinvoices, createpurchasepayment ,specificpurchaseinvoice , specificcustomerinvoice , getcustomerinvoices ,specificcustomerpayment, getLedger, getLedgerLines, getAccountBalances, getPaymentAllocations, getAccountsDashboard, getPartySummary, getPartyLedger } from '../controllers/paymentsandinvoicing/finance.controller.js';
 import { TaxController } from '../controllers/tax/tax.controller.js';
 const router = Router();
 
@@ -8,6 +8,8 @@ router.post('/invoices/generate/:deliveryId', postInvoice);
 router.post('/payments/receive', postPayment);
 router.get('/payments', getpayments);
 router.post('/invoice/generate/:id', grnInvoice);
+router.get('/invoice/grns/available', getAvailablePurchaseInvoiceGrns);
+router.get('/invoice/dns/available', getAvailableSaleInvoiceDns);
 router.get('/getinvoice',getinvoice);
 router.get('/specificinvoice/:id',getspecificinvoice);
 router.get('/purchaselist',getpurchaseinvoices);

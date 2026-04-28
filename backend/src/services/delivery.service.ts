@@ -1,8 +1,45 @@
 // src/services/delivery.service.ts
 import { prisma } from '../lib/prisma.js';
-import { source_doctype_enum } from "@prisma/client";
 
 export class DeliveryService {
+static async syncSalesOrderStatus(tx: any, soId: number) {
+  const orderLines = await tx.salesorderline.findMany({
+    where: { so_id: Number(soId) }
+  });
+
+  const allDeliveryLines = await tx.deliverynoteline.findMany({
+    where: {
+      deliverynote: {
+        so_id: Number(soId)
+      }
+    }
+  });
+
+  const deliveredByLine = allDeliveryLines.reduce((acc: Record<number, number>, line: any) => {
+    if (!line.so_line_id) {
+      return acc;
+    }
+
+    acc[line.so_line_id] = (acc[line.so_line_id] || 0) + Number(line.delivered_qty || 0);
+    return acc;
+  }, {});
+
+  const isFullyDelivered = orderLines.every((line: any) => {
+    const deliveredQty = deliveredByLine[line.so_line_id] || 0;
+    return deliveredQty >= Number(line.quantity || 0);
+  });
+
+  const hasAnyDelivery = Object.values(deliveredByLine).some((qty) => Number(qty) > 0);
+  const nextStatus = isFullyDelivered ? 'COMPLETED' : hasAnyDelivery ? 'PARTIAL' : 'APPROVED';
+
+  await tx.salesorder.update({
+    where: { so_id: Number(soId) },
+    data: { status: nextStatus }
+  });
+
+  return nextStatus;
+}
+
 static async shipOrder(
   soId: number, 
   warehouseId: number, 
@@ -13,13 +50,43 @@ static async shipOrder(
 ) {
   return await prisma.$transaction(async (tx) => {
     
-    // 1. Sales order lines fetch karein
     const orderLines = await tx.salesorderline.findMany({
       where: { so_id: Number(soId) }
     });
 
     if (!orderLines || orderLines.length === 0) {
       throw new Error("Sales Order has no items in database.");
+    }
+
+    const existingDeliveryLines = await tx.deliverynoteline.findMany({
+      where: {
+        deliverynote: {
+          so_id: Number(soId)
+        }
+      }
+    });
+
+    const deliveredByLine = existingDeliveryLines.reduce((acc: Record<number, number>, line: any) => {
+      if (!line.so_line_id) {
+        return acc;
+      }
+
+      acc[line.so_line_id] = (acc[line.so_line_id] || 0) + Number(line.delivered_qty || 0);
+      return acc;
+    }, {});
+
+    const requestedLines = (products || [])
+      .map((item: any) => {
+        const requestedQty = Number(item.delivered_qty ?? item.quantity ?? item.total_unit ?? 0);
+        return {
+          ...item,
+          requestedQty
+        };
+      })
+      .filter((item: any) => item.requestedQty > 0);
+
+    if (!requestedLines.length) {
+      throw new Error('At least one delivery line with quantity is required.');
     }
 
     // --- 2. DELIVERY NUMBER GENERATION ---
@@ -46,94 +113,108 @@ static async shipOrder(
         so_id: Number(soId),
         delivery_number: deliveryNumber, 
         delv_date: today,
-        status: 'POSTED',
+        status: 'PENDING',
         discount: String(discount || "0"),
         transportcharges: String(transportCharges || "0"),
         nettotal: String(totalAmount || "0"),
       }
     });
 
-    // 4. Loop through each line item
-    for (const line of orderLines) {
-      
-      // --- MATCHING LOGIC ---
-      // Frontend array mein is product ko dhoondo (Matching UUIDs as Strings)
-      const matchedProduct = (products || []).find(p => 
-        String(p.product_id) === String(line.product_id) || String(p.id) === String(line.product_id)
-      );
+    for (const item of requestedLines) {
+      const orderLine = item.so_line_id
+        ? orderLines.find((line: any) => line.so_line_id === Number(item.so_line_id))
+        : orderLines.find((line: any) => line.product_id === item.product_id);
 
-      let finalBatchId = null;
+      if (!orderLine) {
+        throw new Error(`Sales order line not found for product ${item.product_id}`);
+      }
 
-      if (matchedProduct) {
-        // User ne dropdown se jo batch number (string) select kiya hai
-        const selectedBatchNumber = matchedProduct.batch; 
+      const alreadyDelivered = deliveredByLine[orderLine.so_line_id] || 0;
+      const remainingQty = Number(orderLine.quantity || 0) - alreadyDelivered;
 
-        // Us product ke batchOptions mein se asli batch_id (integer) nikalo
-        const batchData = (matchedProduct.batchOptions || []).find((b: any) => 
-          String(b.batch_number) === String(selectedBatchNumber)
+      if (item.requestedQty > remainingQty) {
+        throw new Error(`Delivery quantity exceeds remaining sales order quantity for product ${orderLine.product_id}`);
+      }
+
+      let finalBatchId = item.batch_id ? Number(item.batch_id) : (orderLine.batch_id ? Number(orderLine.batch_id) : null);
+      if (!finalBatchId && item.batch) {
+        const batchData = (item.batchOptions || []).find((batch: any) =>
+          String(batch.batch_number) === String(item.batch)
         );
-
         if (batchData) {
           finalBatchId = Number(batchData.batch_id);
         }
       }
 
-      // --- 5. STOCK RECORD CHECK ---
       const existingStock = await tx.stockitem.findUnique({
         where: {
           product_id_warehouse_id: {
-            product_id: line.product_id,
+            product_id: orderLine.product_id,
             warehouse_id: Number(warehouseId)
           }
         }
       });
 
-      if (!existingStock) {
-        throw new Error(`Stock record not found for Product ID: ${line.product_id}`);
+      if (!existingStock || Number(existingStock.quantity_on_hand || 0) < item.requestedQty) {
+        throw new Error(`Insufficient warehouse stock for Product ID: ${orderLine.product_id}`);
       }
 
-      // 6. Delivery Note Line create karein (Mapping frontend batch to DB ID)
       await tx.deliverynoteline.create({
         data: {
           delv_note_id: delivery.delv_note_id,
-          product_id: line.product_id,
-          delivered_qty: line.quantity,
-          uom_id: line.uom_id,
-          batch_id: finalBatchId, // <--- Ab ye perfect Integer store hoga (NaN nahi aayega)
-          so_line_id: line.so_line_id,
+          product_id: orderLine.product_id,
+          delivered_qty: item.requestedQty,
+          uom_id: orderLine.uom_id,
+          batch_id: finalBatchId,
+          so_line_id: orderLine.so_line_id,
+          sale_price: item.sale_price !== undefined && item.sale_price !== null
+            ? Number(item.sale_price)
+            : orderLine.sale_price
+              ? Number(orderLine.sale_price)
+              : null,
+          purchase_price: null,
           remarks: "Shipped from warehouse"
         }
       });
 
-      // 7. Inventory Update (Quantity kam karein)
       await tx.stockitem.update({
         where: {
           product_id_warehouse_id: {
-            product_id: line.product_id,
+            product_id: orderLine.product_id,
             warehouse_id: Number(warehouseId)
           }
         },
         data: {
-          quantity_on_hand: { decrement: line.quantity },
-          reserved_quantity: { decrement: line.quantity } 
+          quantity_on_hand: { decrement: item.requestedQty }
         }
       });
 
-      // 8. Stock Movement (History)
       await tx.stockmovement.create({
         data: {
           mov_type: 'OUTBOUND',
           source_doctype: 'SALE_ORDER', 
-          product_id: line.product_id,
+          product_id: orderLine.product_id,
           warehouse_from_id: Number(warehouseId),
-          quantity: line.quantity,
-          uom_id: line.uom_id,
+          quantity: item.requestedQty,
+          uom_id: orderLine.uom_id,
           posted_at: new Date()
         }
       });
+
+      deliveredByLine[orderLine.so_line_id] = alreadyDelivered + item.requestedQty;
     }
 
-    return delivery;
+    const nextStatus = await DeliveryService.syncSalesOrderStatus(tx, Number(soId));
+
+    await tx.deliverynote.update({
+      where: { delv_note_id: delivery.delv_note_id },
+      data: { status: 'COMPLETED' }
+    });
+
+    return {
+      ...delivery,
+      status: nextStatus
+    };
   });
 }
   static async deliverylist() {

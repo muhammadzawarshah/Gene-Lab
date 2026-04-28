@@ -2,6 +2,15 @@ import { Request, Response } from 'express';
 import { ProductService } from '../../services/product.service.js';
 
 export class ProductController {
+  static async getNextCodes(req: Request, res: Response) {
+    try {
+      const data = await ProductService.getNextCodes(req.query.hsn_prefix);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   static async create(req: Request, res: Response) {
     try {
       console.log(req.body);
@@ -49,6 +58,15 @@ export class ProductController {
       res.json({ success: true, data: formatted });
     } catch (e) {
       res.status(500).json({ success: false, error: "Report generation failed" });
+    }
+  }
+
+  static async getLowStock(req: Request, res: Response) {
+    try {
+      const products = await ProductService.getLowStockProducts();
+      res.json({ success: true, data: products });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 

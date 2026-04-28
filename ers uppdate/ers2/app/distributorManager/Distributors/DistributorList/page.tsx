@@ -24,6 +24,7 @@ const emptyForm = {
   postal_code: '',
   tax_id: '',
   type: 'CUSTOMER',
+  password: '',
 };
 
 export default function DistributorListPage() {
@@ -116,6 +117,7 @@ export default function DistributorListPage() {
       postal_code:   d.addresses?.[0]?.postal_code || '',
       tax_id:        d.tax_id?.toString() || '',
       type:          d.type || 'CUSTOMER',
+      password:      '', // Don't populate password on edit
     });
     setShowModal('edit');
   };
@@ -367,6 +369,16 @@ export default function DistributorListPage() {
                       <option value="SUPPLIER" className="bg-[#0f172a]">Supplier</option>
                       <option value="BOTH"     className="bg-[#0f172a]">Both</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Login Password {showModal === 'edit' && '(Optional)'}</label>
+                    <input 
+                      type="text" 
+                      value={form.password} 
+                      onChange={e => setForm({ ...form, password: e.target.value })}
+                      placeholder={showModal === 'edit' ? 'Leave empty to keep current' : 'Min 8 chars, 1 Upper, 1 Lower, 1 Num, 1 Spec'} 
+                      className={inputCls} 
+                    />
                   </div>
                 </div>
 

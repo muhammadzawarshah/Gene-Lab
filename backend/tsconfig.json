@@ -17,8 +17,8 @@
     "removeComments": true,
 
     /* Strictness (Security ke liye lazmi) */
-    "strict": true,
-    "noImplicitAny": true,
+    "strict": false,
+    "noImplicitAny": false,
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

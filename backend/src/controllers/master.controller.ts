@@ -4,6 +4,36 @@ import { v4 as uuidv4 } from 'uuid';
 
 export class ERPController {
 
+    private static buildUomPayload(body: any) {
+        const name = String(body.name || '').trim().toUpperCase();
+        const subUnitName = String(body.sub_unit_name || '').trim().toUpperCase();
+        const rawConversion = body.conversion_to_base;
+        const hasConversionValue = rawConversion !== undefined && rawConversion !== null && String(rawConversion).trim() !== '';
+        const conversionToBase = hasConversionValue ? Number.parseFloat(String(rawConversion)) : null;
+
+        if (!name) {
+            throw Object.assign(new Error('UOM name is required.'), { statusCode: 400 });
+        }
+
+        if (subUnitName && !hasConversionValue) {
+            throw Object.assign(new Error('Conversion value is required when sub unit is provided.'), { statusCode: 400 });
+        }
+
+        if (hasConversionValue && !subUnitName) {
+            throw Object.assign(new Error('Sub unit is required when conversion value is provided.'), { statusCode: 400 });
+        }
+
+        if (hasConversionValue && (!Number.isFinite(conversionToBase as number) || (conversionToBase as number) <= 0)) {
+            throw Object.assign(new Error('Conversion value must be greater than 0.'), { statusCode: 400 });
+        }
+
+        return {
+            name,
+            sub_unit_name: subUnitName || null,
+            conversion_to_base: conversionToBase
+        };
+    }
+
     // ================= MASTER DATA =================
 
     static async createProduct(req: Request, res: Response, next: NextFunction) {
@@ -55,8 +85,77 @@ export class ERPController {
 
     static async createUOM(req: Request, res: Response, next: NextFunction) {
         try {
-            const uom = await prisma.uom.create({ data: { ...req.body } });
+            const maxUOM = await prisma.uom.findFirst({ orderBy: { uom_id: 'desc' } });
+            const nextId = (maxUOM?.uom_id || 0) + 1;
+            const payload = ERPController.buildUomPayload(req.body);
+            const uom = await prisma.uom.create({
+                data: { uom_id: nextId, ...payload }
+            });
             res.status(201).json({ success: true, data: uom });
+        } catch (e) { next(e); }
+    }
+
+    static async getAllUOMs(req: Request, res: Response, next: NextFunction) {
+        try {
+            const uoms = await prisma.uom.findMany({
+                orderBy: { uom_id: 'asc' },
+                select: {
+                    uom_id: true,
+                    name: true,
+                    sub_unit_name: true,
+                    conversion_to_base: true
+                }
+            });
+            res.json({ success: true, data: uoms });
+        } catch (e) { next(e); }
+    }
+
+    static async updateUOM(req: Request, res: Response, next: NextFunction) {
+        try {
+            const payload = ERPController.buildUomPayload(req.body);
+            const uom = await prisma.uom.update({
+                where: { uom_id: parseInt(req.params.id as string) },
+                data: payload
+            });
+            res.json({ success: true, data: uom });
+        } catch (e) { next(e); }
+    }
+
+    static async deleteUOM(req: Request, res: Response, next: NextFunction) {
+        try {
+            await prisma.uom.delete({ where: { uom_id: parseInt(req.params.id as string) } });
+            res.json({ success: true });
+        } catch (e) { next(e); }
+    }
+
+    static async createMode(req: Request, res: Response, next: NextFunction) {
+        try {
+            const mode = await (prisma as any).productmode.create({ data: { name: req.body.name } });
+            res.status(201).json({ success: true, data: mode });
+        } catch (e) { next(e); }
+    }
+
+    static async getAllModes(req: Request, res: Response, next: NextFunction) {
+        try {
+            const modes = await (prisma as any).productmode.findMany({ orderBy: { mode_id: 'asc' } });
+            res.json({ success: true, data: modes });
+        } catch (e) { next(e); }
+    }
+
+    static async updateMode(req: Request, res: Response, next: NextFunction) {
+        try {
+            const mode = await (prisma as any).productmode.update({
+                where: { mode_id: parseInt(req.params.id as string) },
+                data: { name: req.body.name }
+            });
+            res.json({ success: true, data: mode });
+        } catch (e) { next(e); }
+    }
+
+    static async deleteMode(req: Request, res: Response, next: NextFunction) {
+        try {
+            await (prisma as any).productmode.delete({ where: { mode_id: parseInt(req.params.id as string) } });
+            res.json({ success: true });
         } catch (e) { next(e); }
     }
 
@@ -65,6 +164,26 @@ export class ERPController {
         try {
             console.log(req.body);
             const { items, financials } = req.body;
+
+            const productIds = (items || [])
+                .map((item: any) => item.product_id)
+                .filter(Boolean);
+
+            const products = productIds.length
+                ? await prisma.product.findMany({
+                    where: {
+                        product_id: {
+                            in: productIds
+                        }
+                    },
+                    select: {
+                        product_id: true,
+                        uom_id: true
+                    }
+                })
+                : [];
+
+            const productUomMap = new Map(products.map((product) => [product.product_id, product.uom_id]));
 
             const po = await prisma.purchaseorder.create({
                 data: {
@@ -82,6 +201,11 @@ export class ERPController {
                             // Individual item ka logic
                             const qty = parseFloat(item.total_unit);
                             const rate = parseFloat(item.approved_rate);
+                            const resolvedUomId = Number(item.uom_id) || productUomMap.get(item.product_id);
+
+                            if (!resolvedUomId) {
+                                throw new Error(`UOM not found for selected product ${item.product_id}.`);
+                            }
 
                             // Item ka apna total (Quantity * Rate)
                             // Note: Agar tax/discount per-item hai toh yahan calculate hoga
@@ -90,12 +214,12 @@ export class ERPController {
                             return {
                                 product_id: item.product_id,
                                 quantity: qty,
-                                uom_id: Number(item.uom_id) || 1, // Default 1 agar missing ho
+                                uom_id: resolvedUomId,
                                 tax_id: item.tax_id ? Number(item.tax_id) : null,
                                 unit_price: rate,
-
-                                // FIX: Yahan pure order ka netTotal nahi, balki sirf IS item ka total jayega
-                                line_total: itemLineTotal
+                                line_total: itemLineTotal,
+                                sale_price: item.sale_price ? parseFloat(item.sale_price) : null,
+                                purchase_price: item.purchase_price ? parseFloat(item.purchase_price) : null,
                             };
                         })
                     }
@@ -279,10 +403,18 @@ export class ERPController {
     // Is method ko apne ERPController mein update karein
     static async getDropdowns(req: Request, res: Response, next: NextFunction) {
         try {
-            const [products, parties, uoms, categories, warehouses, provinces, tax , batch] = await Promise.all([
+            const [products, parties, uoms, categories, warehouses, provinces, tax, batch, modes] = await Promise.all([
                 prisma.product.findMany({ select: { product_id: true, name: true, sku_code: true } }),
                 prisma.party.findMany(),
-                prisma.uom.findMany(),
+                prisma.uom.findMany({
+                    orderBy: { uom_id: 'asc' },
+                    select: {
+                        uom_id: true,
+                        name: true,
+                        sub_unit_name: true,
+                        conversion_to_base: true
+                    }
+                }),
                 prisma.productcategory.findMany(),
                 prisma.warehouse.findMany(),
                 prisma.province.findMany(),
@@ -294,6 +426,7 @@ export class ERPController {
                     },
                     orderBy: { batch_id: 'desc' }
                 }),
+                (prisma as any).productmode.findMany({ orderBy: { mode_id: 'asc' } }),
             ]);
 
             res.json({
@@ -306,7 +439,8 @@ export class ERPController {
                     warehouses,
                     provinces,
                     tax,
-                    batch
+                    batch,
+                    modes
                 }
             });
         } catch (e) {
