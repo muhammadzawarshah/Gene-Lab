@@ -90,7 +90,15 @@ export default function VendorLedger() {
       try {
         if (!currentUserId || !token) throw new Error("AUTH_INVALID");
         const response = await secureApi.get("/api/v1/finance/parties/summary/SUPPLIER");
-        setVendors(response.data);
+        const normalizedVendors = (Array.isArray(response.data) ? response.data : []).map((vendor: any) => ({
+          ...vendor,
+          name: vendor.name || vendor.company || "Unknown Supplier",
+          company: vendor.company || vendor.name || "Unknown Supplier",
+          phone: vendor.phone || "N/A",
+          totalDue: Number(vendor.totalDue || vendor.totalBalance || 0),
+          lastPurchase: vendor.lastPurchase || vendor.lastActive || "N/A",
+        }));
+        setVendors(normalizedVendors);
       } catch {
         toast.error("SECURITY ALERT", {
           description: "Unauthorized access detected or session expired.",
@@ -144,8 +152,8 @@ export default function VendorLedger() {
     const safeSearch = search.toLowerCase().replace(/[${};"']/g, "");
     return vendors.filter(
       (vendor) =>
-        vendor.name.toLowerCase().includes(safeSearch) ||
-        vendor.company.toLowerCase().includes(safeSearch)
+        (vendor.name || "").toLowerCase().includes(safeSearch) ||
+        (vendor.company || "").toLowerCase().includes(safeSearch)
     );
   }, [search, vendors]);
 

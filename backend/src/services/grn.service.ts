@@ -74,8 +74,9 @@ export class GrnService {
         received_date: new Date(),
         status: 'COMPLETED',
         grn_number: `GRN-${Date.now()}`,
-        transportcharges : transportCharges !== undefined && transportCharges !== null ? String(transportCharges) : null,
-        nettotal : String(netTotal)
+        discount: discount !== undefined && discount !== null ? String(discount) : null,
+        transportcharges: transportCharges !== undefined && transportCharges !== null ? String(transportCharges) : null,
+        nettotal: String(netTotal)
       }
     });
 

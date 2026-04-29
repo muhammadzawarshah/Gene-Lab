@@ -32,6 +32,8 @@ interface SelectedOrderDetails {
   customerName: string;
   date: string;
   status: string;
+  transportCharges: number;
+  discount: number;
 }
 
 export default function CreateInvoice() {
@@ -92,7 +94,10 @@ export default function CreateInvoice() {
       setOrderMeta({
         customerName: data.salesorder?.party?.name || "Unknown Customer",
         date: data.delv_date ? formatDate(data.delv_date) : "N/A",
-        status: data.status || "N/A"
+        status: data.status || "N/A",
+        // DB mein lowercase 'transportcharges' save hota hai — dono handle karo
+        transportCharges: Number(data.transportcharges ?? data.transportCharges ?? 0),
+        discount: Number(data.discount ?? 0),
       });
 
       const rawLines = data.deliverynoteline || [];
@@ -290,8 +295,8 @@ export default function CreateInvoice() {
 
       {/* FOOTER */}
       {items.length > 0 && (
-        <div className="mt-8 flex flex-col md:flex-row justify-between items-center bg-emerald-500/5 p-10 rounded-[2.5rem] border border-emerald-500/10 gap-6">
-          <div className="flex gap-10">
+      <div className="mt-8 flex flex-col md:flex-row justify-between items-center bg-emerald-500/5 p-10 rounded-[2.5rem] border border-emerald-500/10 gap-6">
+          <div className="flex gap-8 flex-wrap">
             <div>
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Tax</p>
               <p className="text-xl font-bold text-amber-400">
@@ -299,10 +304,40 @@ export default function CreateInvoice() {
               </p>
             </div>
             <div className="h-12 w-px bg-white/10 hidden md:block" />
+            {orderMeta && Number(orderMeta.transportCharges) > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <Truck size={10} /> Transport
+                </p>
+                <p className="text-xl font-bold text-blue-400">
+                  +PKR {Number(orderMeta.transportCharges).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {orderMeta && Number(orderMeta.discount) > 0 && (
+              <>
+                <div className="h-12 w-px bg-white/10 hidden md:block" />
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <Percent size={10} /> Discount
+                  </p>
+                  <p className="text-xl font-bold text-rose-400">
+                    -PKR {Number(orderMeta.discount).toLocaleString()}
+                  </p>
+                </div>
+              </>
+            )}
+            <div className="h-12 w-px bg-white/10 hidden md:block" />
             <div>
               <p className="text-[10px] font-black text-emerald-500/60 uppercase tracking-widest mb-1">Grand Total (Net)</p>
               <p className="text-4xl font-black italic text-emerald-400 tracking-tighter">
-                PKR {items.reduce((sum, i) => sum + Number(i.amount || 0) + Number(i.tax_amount || 0), 0).toLocaleString()}
+                PKR {
+                  (
+                    items.reduce((sum, i) => sum + Number(i.amount || 0) + Number(i.tax_amount || 0), 0)
+                    + Number(orderMeta?.transportCharges || 0)
+                    - Number(orderMeta?.discount || 0)
+                  ).toLocaleString()
+                }
               </p>
             </div>
           </div>

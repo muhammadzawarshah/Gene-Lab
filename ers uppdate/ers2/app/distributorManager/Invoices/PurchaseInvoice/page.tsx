@@ -8,7 +8,7 @@ import {
   ChevronDown, CheckSquare, Loader2, Lock, Receipt, ShieldCheck, Truck, Percent
 } from 'lucide-react';
 
-// --- Updated Types to include Backend-driven Discount & Transport ---
+// --- Types ---
 interface GRNLineItem {
   grn_line_id: number;
   product_name: string;
@@ -17,8 +17,8 @@ interface GRNLineItem {
   expiry: string | null;
   received_qty: string | number;
   uom: string;
-  discount: number | string;          // From Backend
-  transport_charges: number | string; // From Backend
+  discount: number;
+  transport_charges: number;
 }
 
 interface GRNReference {
@@ -30,15 +30,16 @@ export default function CreateInvoice() {
   const [grnList, setGrnList] = useState<GRNReference[]>([]);
   const [selectedGRNId, setSelectedGRNId] = useState("");
   const [items, setItems] = useState<GRNLineItem[]>([]);
+  const [grnMeta, setGrnMeta] = useState<{ discount: number; transport: number; nettotal: number } | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   const token = Cookies.get('auth_token');
   const currentUserId = Cookies.get('user_id');
   const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
   const api = useMemo(() => axios.create({
     baseURL: API_BASE,
-    headers: { 
+    headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     }
@@ -65,7 +66,7 @@ export default function CreateInvoice() {
 
   useEffect(() => { fetchGRNList(); }, [fetchGRNList]);
 
-  // --- 2. Fetch Details & Map All Backend Columns ---
+  // --- 2. Fetch GRN Details ---
   const fetchGRNDetails = useCallback(async (id: string) => {
     if (!id) return;
     setLoading(true);
@@ -73,22 +74,31 @@ export default function CreateInvoice() {
       const res = await api.get(`/api/v1/grn/singlegrn/${id}`);
       const rawData = res.data.data;
 
-      // Mapping Prisma nested structure including financial columns from backend
-      const mappedItems = rawData.grnline.map((line: any) => ({
-        grn_line_id: line.grn_line_id,
-        product_name: line.product?.name || "Unknown",
-        batch_no: line.batch?.batch_number || "N/A",
-        mfg_date: line.batch?.manufacturing_date ? formatDate(line.batch.manufacturing_date) : "---",
-        expiry: line.batch?.expiry_date ? formatDate(line.batch.expiry_date) : "---",
-        received_qty: line.received_qty,
-        uom: line.uom?.name || "Units",
-        discount: line.discount || 0,                 
-        transport_charges: line.transport_charges || 0 
+      // discount aur transportcharges GRN master record mein hain — grnline mein NAHI
+      const grnDiscount  = Number(rawData.discount         ?? 0);
+      const grnTransport = Number(rawData.transportcharges ?? 0);
+      const grnNettotal  = Number(rawData.nettotal          ?? 0);
+
+      setGrnMeta({ discount: grnDiscount, transport: grnTransport, nettotal: grnNettotal });
+
+      const mappedItems = (rawData.grnline || []).map((line: any) => ({
+        grn_line_id:       line.grn_line_id,
+        product_name:      line.product?.name || "Unknown",
+        batch_no:          line.batch?.batch_number || "N/A",
+        mfg_date:          line.batch?.manufacturing_date ? formatDate(line.batch.manufacturing_date) : "---",
+        expiry:            line.batch?.expiry_date ? formatDate(line.batch.expiry_date) : "---",
+        received_qty:      line.received_qty,
+        uom:               line.uom?.name || "Units",
+        // GRN master se — yahi sahi hain
+        discount:          grnDiscount,
+        transport_charges: grnTransport
       }));
 
       setItems(mappedItems);
     } catch (err) {
       toast.error("Security Alert: Data access denied");
+      setItems([]);
+      setGrnMeta(null);
     } finally {
       setLoading(false);
     }
@@ -96,28 +106,29 @@ export default function CreateInvoice() {
 
   useEffect(() => {
     if (selectedGRNId) fetchGRNDetails(selectedGRNId);
-    else setItems([]);
+    else { setItems([]); setGrnMeta(null); }
   }, [selectedGRNId, fetchGRNDetails]);
 
-  // --- 3. Create Invoice (Clean Payload) ---
+  // --- 3. Create Invoice ---
   const handleCreateInvoice = async () => {
     if (!selectedGRNId) return;
     const toastId = toast.loading("Finalizing Secure Invoice...");
     const createdGRNId = selectedGRNId;
-    
+
     try {
       const payload = {
         grn_id: Number(selectedGRNId),
         userId: currentUserId,
-        narration: `Purchase Invoice for GRN #${selectedGRNId}` 
+        narration: `Purchase Invoice for GRN #${selectedGRNId}`
       };
 
       await api.post(`/api/v1/finance/invoice/generate/${selectedGRNId}`, payload);
-      
+
       toast.success("Invoice successfully created!", { id: toastId });
       setGrnList((prev) => prev.filter((grn) => String(grn.grn_id) !== createdGRNId));
       setSelectedGRNId("");
       setItems([]);
+      setGrnMeta(null);
       fetchGRNList();
     } catch (err: any) {
       const message = err?.response?.data?.message || "Invoice Generation Failed";
@@ -125,7 +136,6 @@ export default function CreateInvoice() {
     }
   };
 
-  // Shared Styles
   const thStyle = "p-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 bg-white/[0.01]";
   const tdStyle = "p-4 text-xs font-bold text-white border-b border-white/5 whitespace-nowrap";
 
@@ -149,7 +159,7 @@ export default function CreateInvoice() {
         <div className="relative w-full md:w-96 group">
           <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-3 block ml-2">Select Approved GRN</label>
           <div className="relative">
-            <select 
+            <select
               className="w-full bg-slate-900 border border-white/10 rounded-2xl py-5 pl-6 pr-12 text-xs font-black appearance-none outline-none focus:border-blue-500 transition-all cursor-pointer shadow-2xl uppercase"
               value={selectedGRNId}
               onChange={(e) => setSelectedGRNId(e.target.value)}
@@ -173,7 +183,7 @@ export default function CreateInvoice() {
             <Loader2 className="animate-spin text-blue-500" size={48} />
           </div>
         )}
-        
+
         <div className="overflow-x-auto">
           <table className="w-full border-collapse min-w-[1300px]">
             <thead>
@@ -185,8 +195,8 @@ export default function CreateInvoice() {
                 <th className={thStyle}>Expiry</th>
                 <th className={thStyle}>Qty</th>
                 <th className={thStyle}>UOM</th>
-                <th className={thStyle}>Discount</th>
-                <th className={thStyle}>Transport</th>
+                <th className={thStyle}>Discount (GRN)</th>
+                <th className={thStyle}>Transport (GRN)</th>
                 <th className="p-4 text-right px-10 text-[11px] font-black text-blue-500 border-b border-white/5 bg-blue-500/5 uppercase italic">Status</th>
               </tr>
             </thead>
@@ -199,17 +209,21 @@ export default function CreateInvoice() {
                       <span className="uppercase tracking-wide">{item.product_name}</span>
                     </td>
                     <td className={tdStyle}>
-                       <span className="bg-white/5 px-3 py-1 rounded text-slate-400 font-mono">{item.batch_no}</span>
+                      <span className="bg-white/5 px-3 py-1 rounded text-slate-400 font-mono">{item.batch_no}</span>
                     </td>
                     <td className={tdStyle + " font-mono text-emerald-500/80"}>{item.mfg_date}</td>
                     <td className={tdStyle + " font-mono text-rose-500/80"}>{item.expiry}</td>
                     <td className={tdStyle}>{item.received_qty}</td>
                     <td className={tdStyle + " text-blue-400"}>{item.uom}</td>
-                    {/* Backend Driven Data Columns */}
-                    <td className={tdStyle + " text-orange-400/90 font-mono"}>{item.discount}</td>
-                    <td className={tdStyle + " text-indigo-400/90 font-mono"}>{item.transport_charges}</td>
+                    {/* GRN master se aane wale values */}
+                    <td className={tdStyle + " text-orange-400/90 font-mono"}>
+                      {Number(item.discount) > 0 ? `PKR ${Number(item.discount).toLocaleString()}` : '—'}
+                    </td>
+                    <td className={tdStyle + " text-indigo-400/90 font-mono"}>
+                      {Number(item.transport_charges) > 0 ? `PKR ${Number(item.transport_charges).toLocaleString()}` : '—'}
+                    </td>
                     <td className="p-4 text-right px-10">
-                        <span className="text-[10px] font-black bg-white/5 px-4 py-2 rounded-lg text-slate-500">AUDITED</span>
+                      <span className="text-[10px] font-black bg-white/5 px-4 py-2 rounded-lg text-slate-500">AUDITED</span>
                     </td>
                   </tr>
                 ))
@@ -231,12 +245,35 @@ export default function CreateInvoice() {
       {/* FOOTER ACTION */}
       {items.length > 0 && (
         <div className="mt-10 flex flex-col md:flex-row justify-between items-center bg-blue-500/5 p-10 rounded-[3rem] border border-blue-500/10 gap-8">
-          <div>
-            <p className="text-[10px] font-black text-slate-500 uppercase italic mb-1 tracking-widest">Final Summary</p>
-            <p className="text-3xl font-black italic text-white tracking-tighter">Backend Verified Data Ready</p>
-            <p className="text-[9px] text-blue-400 font-bold uppercase mt-2">Adjustments (Discount/Transport) fetched from system records</p>
+          <div className="space-y-3">
+            <p className="text-[10px] font-black text-slate-500 uppercase italic tracking-widest">GRN Financial Summary</p>
+            <div className="flex flex-wrap gap-8">
+              {grnMeta && Number(grnMeta.discount) > 0 && (
+                <div>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1 mb-1">
+                    <Percent size={10} /> Discount
+                  </p>
+                  <p className="text-xl font-black text-orange-400">-PKR {Number(grnMeta.discount).toLocaleString()}</p>
+                </div>
+              )}
+              {grnMeta && Number(grnMeta.transport) > 0 && (
+                <div>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1 mb-1">
+                    <Truck size={10} /> Transport
+                  </p>
+                  <p className="text-xl font-black text-indigo-400">+PKR {Number(grnMeta.transport).toLocaleString()}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Net Total</p>
+                <p className="text-3xl font-black italic text-white tracking-tighter">
+                  PKR {Number(grnMeta?.nettotal || 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
           </div>
-          <button 
+
+          <button
             onClick={handleCreateInvoice}
             className="bg-blue-600 hover:bg-blue-500 text-white px-16 py-7 rounded-full font-black uppercase text-xs tracking-[0.2em] flex items-center gap-4 shadow-2xl shadow-blue-500/30 transition-all active:scale-95"
           >

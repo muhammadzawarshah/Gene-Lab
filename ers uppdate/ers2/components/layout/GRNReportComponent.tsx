@@ -8,6 +8,8 @@ interface GRNLineItem {
     product: { name: string; sku_code?: string };
     batch?: { batch_number: string; expiry_date?: string; manufacturing_date?: string };
     received_qty: any;
+    purchase_price?: any;
+    sale_price?: any;
     uom?: { name: string };
     remarks?: string;
     purchaseorderline?: {
@@ -51,9 +53,28 @@ export const GRNReportComponent = ({ data }: GRNReportProps) => {
         return isNaN(num) ? "0.00" : num.toLocaleString(undefined, { minimumFractionDigits: 2 });
     };
 
+    const toNumber = (value: any) => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : 0;
+    };
+
+    const getLineUnitPrice = (line: GRNLineItem) => {
+        const grnPurchasePrice = toNumber(line.purchase_price);
+        if (grnPurchasePrice > 0) return grnPurchasePrice;
+
+        const poUnitPrice = toNumber(line.purchaseorderline?.unit_price);
+        return poUnitPrice > 0 ? poUnitPrice : 0;
+    };
+
+    const getLineTotal = (line: GRNLineItem) => {
+        const poLineTotal = toNumber(line.purchaseorderline?.line_total);
+        if (poLineTotal > 0) return poLineTotal;
+
+        return toNumber(line.received_qty) * getLineUnitPrice(line);
+    };
+
     const grossTotal = data.grnline?.reduce((sum, line) => {
-        const lt = parseFloat(line.purchaseorderline?.line_total ?? 0);
-        return sum + (isNaN(lt) ? 0 : lt);
+        return sum + getLineTotal(line);
     }, 0) || 0;
 
     const discount   = parseFloat(data.discount || '0') || 0;
@@ -63,7 +84,7 @@ export const GRNReportComponent = ({ data }: GRNReportProps) => {
     const taxTotal = data.grnline?.reduce((sum, line) => {
         const pol = line.purchaseorderline;
         if (!pol?.tax) return sum;
-        const lt = parseFloat(pol.line_total ?? 0) || 0;
+        const lt = getLineTotal(line);
         const rate = parseFloat(pol.tax.rate ?? 0) || 0;
         const taxAmt = pol.tax.type === 'percentage' ? (lt * rate) / 100 : rate;
         return sum + taxAmt;
@@ -145,10 +166,10 @@ export const GRNReportComponent = ({ data }: GRNReportProps) => {
                                 <td className="border border-black text-center">{item.uom?.name || 'Units'}</td>
                                 <td className="border border-black px-1 text-right font-semibold">{item.received_qty}</td>
                                 <td className="border border-black px-1 text-right font-mono">
-                                    {item.purchaseorderline?.unit_price ? formatCurrency(item.purchaseorderline.unit_price) : '---'}
+                                    {getLineUnitPrice(item) > 0 ? formatCurrency(getLineUnitPrice(item)) : '---'}
                                 </td>
                                 <td className="border border-black px-1 text-right font-semibold">
-                                    {item.purchaseorderline?.line_total ? formatCurrency(item.purchaseorderline.line_total) : '---'}
+                                    {getLineTotal(item) > 0 ? formatCurrency(getLineTotal(item)) : '---'}
                                 </td>
                             </tr>
                         ))}

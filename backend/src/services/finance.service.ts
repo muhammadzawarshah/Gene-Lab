@@ -54,12 +54,21 @@ export class FinanceService {
       }
 
       // ── 4. Create Customer Invoice Header ─────────────────────────────────
+      // total_amount: DN ka nettotal use karo (transport + discount included)
+      // salesorder.total_amount mein transport nahi hoti
+      const dnNetTotal   = Number(delivery.nettotal        || delivery.salesorder.total_amount || 0);
+      const dnTransport  = Number(delivery.transportcharges || 0);
+      const dnDiscount   = Number(delivery.discount          || 0);
+
       const invoice = await tx.customerinvoice.create({
         data: {
           so_id:             delivery.so_id,
           party_id_customer: delivery.salesorder.party_id_customer,
           cust_invoice_date: new Date(),
-          total_amount:      delivery.salesorder.total_amount,
+          total_amount:      dnNetTotal,       // ← DN nettotal (with transport)
+          discount:          String(dnDiscount),
+          transportcharges:  String(dnTransport),
+          nettotal:          String(dnNetTotal),
           status:            'POSTED',
         } as any
       });
@@ -79,26 +88,29 @@ export class FinanceService {
 
       // ── 6. Calculate COGS using ACTUAL DELIVERED quantities ───────────────
       //    Price source priority:
-      //      (a) Latest Supplier Invoice Line  (purchase price)
-      //      (b) Product Price table           (fallback if no purchase yet)
+      //      (a) GRN Line purchase_price  ← PRIMARY (entered at time of receiving)
+      //      (b) Product Price table      ← FALLBACK if no GRN price found
       const deliveredProductIds = [
         ...new Set(delivery.deliverynoteline.map((l) => l.product_id))
       ];
 
-      // (a) Latest purchase price from supplier invoice lines
-      const latestCostLines = await tx.supplierinvoiceline.findMany({
-        where:   { product_id: { in: deliveredProductIds } },
-        orderBy: { suppl_inv_line_id: 'desc' },
-        select:  { product_id: true, unit_price: true },
+      // (a) PRIMARY: Latest purchase_price from GRN lines
+      const latestGrnCostLines = await tx.grnline.findMany({
+        where: {
+          product_id: { in: deliveredProductIds },
+          purchase_price: { not: null }
+        },
+        orderBy: { grn_line_id: 'desc' },
+        select: { product_id: true, purchase_price: true },
       });
       const costMap = new Map<string, number>();
-      for (const cl of latestCostLines) {
-        if (cl.product_id && !costMap.has(cl.product_id)) {
-          costMap.set(cl.product_id, Number(cl.unit_price));
+      for (const gl of latestGrnCostLines) {
+        if (gl.product_id && !costMap.has(gl.product_id) && gl.purchase_price !== null) {
+          costMap.set(gl.product_id, Number(gl.purchase_price));
         }
       }
 
-      // (b) Fallback: productprice table for products with no supplier invoice yet
+      // (b) FALLBACK: productprice table for products with no GRN purchase price yet
       const missingIds = deliveredProductIds.filter((id) => !costMap.has(id));
       if (missingIds.length > 0) {
         const fallbackPrices = await tx.productprice.findMany({
@@ -242,15 +254,43 @@ export class FinanceService {
       ==========================
       CREATE SUPPLIER INVOICE
       ==========================
+      Total amount: GRN lines ki actual purchase_price × received_qty se calculate karo
+      (PO ka total_amount rely mat karo — wo 0 ho sakta hai agar frontend ne nahi bheja)
+      ==========================
       */
+
+      // ── Calculate actual invoice total from GRN lines ──────────────────────
+      let grnInvoiceTotal = 0;
+      for (const line of grn.grnline) {
+        const poLine = grn.purchaseorder.purchaseorderline.find(
+          (p) => p.po_line_id === line.po_line_id
+        );
+        // Priority: GRN line ki purchase_price → phir PO line unit_price
+        const unitCost = line.purchase_price !== null && line.purchase_price !== undefined
+          ? Number(line.purchase_price)
+          : Number(poLine?.unit_price || 0);
+        grnInvoiceTotal += Number(line.received_qty) * unitCost;
+      }
+      grnInvoiceTotal = Math.round(grnInvoiceTotal * 100) / 100;
+
+      // GRN ka discount aur transport charges bhi invoice mein store karo
+      const grnDiscount   = Number(grn.discount         || 0);
+      const grnTransport  = Number(grn.transportcharges || 0);
+      // Nettotal = subtotal + transport - discount (agar GRN mein saved hai to use karo, warna calculate)
+      const grnNettotal   = grn.nettotal
+        ? Number(grn.nettotal)
+        : Math.round((grnInvoiceTotal + grnTransport - grnDiscount) * 100) / 100;
 
       const invoice = await tx.supplierinvoice.create({
         data: {
-          po_id: grn.po_id,
-          party_id: grn.purchaseorder.party_id_supplier,
+          po_id:              grn.po_id,
+          party_id:           grn.purchaseorder.party_id_supplier,
           suppl_invoice_date: new Date(),
-          total_amount: grn.purchaseorder.total_amount,
-          status: "POSTED"
+          total_amount:       grnNettotal,          // ← nettotal with transport
+          discount:           String(grnDiscount),
+          transportcharges:   String(grnTransport),
+          nettotal:           String(grnNettotal),
+          status:             "POSTED"
         } as any
       });
 
@@ -264,15 +304,20 @@ export class FinanceService {
         data: grn.grnline.map((line) => {
 
           const poLine = grn.purchaseorder?.purchaseorderline.find(
-            p => p.po_line_id === line.po_line_id
+            (p) => p.po_line_id === line.po_line_id
           );
+
+          // Priority: GRN line ki purchase_price → phir PO unit_price
+          const unitCost = line.purchase_price !== null && line.purchase_price !== undefined
+            ? Number(line.purchase_price)
+            : Number(poLine?.unit_price || 0);
 
           return {
             suppl_inv_id: invoice.suppl_inv_id,
             product_id: line.product_id,
             quantity: line.received_qty,
-            unit_price: poLine?.unit_price || 0,
-            line_total: Number(line.received_qty) * Number(poLine?.unit_price || 0),
+            unit_price: unitCost,
+            line_total: Number(line.received_qty) * unitCost,
             tax_id: poLine?.tax_id
           };
 
@@ -303,7 +348,7 @@ export class FinanceService {
               {
                 // DR: Inventory (Asset 1.4) — stock value increases
                 gl_account_id: 14,
-                debit:  invoice.total_amount,
+                debit:  Number(invoice.total_amount),
                 credit: 0,
                 party_id_sub_ledger: grn.purchaseorder.party_id_supplier,
               },
@@ -311,7 +356,7 @@ export class FinanceService {
                 // CR: Accounts Payable (Liability 2.1) — we owe the supplier
                 gl_account_id: 21,
                 debit:  0,
-                credit: invoice.total_amount,
+                credit: Number(invoice.total_amount),
                 party_id_sub_ledger: grn.purchaseorder.party_id_supplier,
               }
             ]
@@ -416,11 +461,37 @@ static async processPayment(data: {
         // 1. Fetch Invoice aur check karna ke wo exist karti hai
         const invoice = await tx.customerinvoice.findUnique({
           where: { cust_inv_id: Number(invoiceId) },
-          select: { party_id_customer: true, total_amount: true }
+          select: {
+            party_id_customer: true,
+            total_amount: true,
+            paymentallocation: {
+              select: { allocated_amount: true }
+            }
+          }
         });
 
         if (!invoice) {
           throw new Error("Invoice reference not found in database.");
+        }
+
+        const invoiceTotal = Number(invoice.total_amount || 0);
+        const alreadyPaid = (invoice.paymentallocation || []).reduce(
+          (sum: number, allocation: any) => sum + Number(allocation.allocated_amount || 0),
+          0
+        );
+        const remainingBalance = Math.max(invoiceTotal - alreadyPaid, 0);
+        const paymentAmount = Number(amount);
+
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+          throw new Error("Please enter a valid payment amount.");
+        }
+
+        if (remainingBalance <= 0) {
+          throw new Error("This invoice is already fully paid.");
+        }
+
+        if (paymentAmount > remainingBalance) {
+          throw new Error(`Payment amount exceeds remaining balance (${remainingBalance}).`);
         }
 
         // 2. Create Payment Record (RECEIPT)
@@ -430,7 +501,7 @@ static async processPayment(data: {
             payment_date: payment_date ? new Date(payment_date) : new Date(),
             payment_type: 'RECEIPT',
             method: method || 'CASH', 
-            amount: Number(amount),
+            amount: paymentAmount,
             reference_number: `INV-${invoiceId}`,
             created_at: new Date(),
             created_by: userId ? String(userId) : null
@@ -442,7 +513,7 @@ static async processPayment(data: {
           data: {
             payment_id: payment.payment_id,
             cust_inv_id: Number(invoiceId),
-            allocated_amount: Number(amount),
+            allocated_amount: paymentAmount,
             remarks: remarks || ""
           }
         });
@@ -453,8 +524,7 @@ static async processPayment(data: {
           _sum: { allocated_amount: true }
         });
         const totalPaid = Number(allocationSummary._sum.allocated_amount || 0);
-        const invoiceTotal = Number(invoice.total_amount || 0);
-        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'POSTED';
+        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : totalPaid > 0 ? 'PARTIAL' : 'POSTED';
 
         await tx.customerinvoice.update({
           where: { cust_inv_id: Number(invoiceId) },
@@ -621,7 +691,7 @@ static async getinvoice(){
 
 static async specificinvoice(id: number) {
   try {
-    return await prisma.customerinvoice.findUnique({
+    const invoice = await prisma.customerinvoice.findUnique({
       where: {
         cust_inv_id: id
       },
@@ -643,9 +713,38 @@ static async specificinvoice(id: number) {
             // Agar line ke sath tax details bhi chahiye
             tax: true 
           }
+        },
+        paymentallocation: {
+          select: {
+            allocated_amount: true
+          }
         }
       }
     });
+
+    if (!invoice) return null;
+
+    const allocationSummary = await prisma.paymentallocation.aggregate({
+      where: { cust_inv_id: id },
+      _sum: { allocated_amount: true }
+    });
+
+    const totalAmount = Number(invoice.total_amount || 0);
+    const paidAmount = Number(allocationSummary._sum.allocated_amount || 0);
+    const balanceAmount = Math.max(totalAmount - paidAmount, 0);
+    const computedStatus =
+      balanceAmount <= 0 && totalAmount > 0
+        ? 'PAID'
+        : paidAmount > 0
+          ? 'PARTIAL'
+          : (invoice.status || 'POSTED');
+
+    return {
+      ...invoice,
+      paidAmount,
+      balanceAmount,
+      status: computedStatus
+    };
   } catch (error) {
     console.error("Error fetching specific invoice:", error);
     throw error;
@@ -863,26 +962,34 @@ static async specificPurchaseInvoice(invoiceId: number) {
             },
           },
         },
-        // 2. Invoice ke andar kaunse products hain (Line Items)
+        // 2. Invoice line items
         supplierinvoiceline: {
           include: {
             product: {
-              select: {
-                name: true,
-                sku_code: true,
-              },
+              select: { name: true, sku_code: true },
             },
-            tax: true, // Tax details per line
+            tax: true,
           },
         },
-        // 3. Is invoice par ab tak kitni payments hui hain
+        // 3. Payments made so far
         paymentallocation: {
-          include: {
-            payment: true, // Payment method, date, aur ref number ke liye
-          },
+          include: { payment: true },
         },
-        // 4. Purchase Order ki reference
-        purchaseorder: true,
+        // 4. Purchase Order + GRN (to fetch transportcharges for older invoices)
+        purchaseorder: {
+          include: {
+            grn: {
+              select: {
+                grn_id: true,
+                discount: true,
+                transportcharges: true,
+                nettotal: true,
+              },
+              orderBy: { grn_id: 'desc' },
+              take: 1,
+            }
+          }
+        },
       },
     });
 
@@ -890,18 +997,46 @@ static async specificPurchaseInvoice(invoiceId: number) {
       throw new Error("Purchase Invoice not found.");
     }
 
-    // Calculation for Total Paid and Balance
+    // Calculations
     const totalPaid = invoice.paymentallocation.reduce(
       (sum, alloc) => sum + Number(alloc.allocated_amount),
       0
     );
+    const balanceDue_old = Number(invoice.total_amount) - totalPaid; // kept for reference
 
-    const balanceDue = Number(invoice.total_amount) - totalPaid;
+    // Transport/Discount: invoice mein saved values prefer karo —
+    // agar invoice purana hai (columns nahi the), GRN se fallback lo
+    const linkedGRN = invoice.purchaseorder?.grn?.[0];
+    const resolvedTransport = Number(invoice.transportcharges || 0) > 0
+      ? Number(invoice.transportcharges)
+      : Number(linkedGRN?.transportcharges || 0);
+
+    const resolvedDiscount = Number(invoice.discount || 0) > 0
+      ? Number(invoice.discount)
+      : Number(linkedGRN?.discount || 0);
+
+    // Subtotal = line items sum
+    const lineSubtotal = (invoice.supplierinvoiceline as any[]).reduce(
+      (sum: number, line: any) => sum + Number(line.line_total || 0),
+      0
+    );
+
+    // True total = lineSubtotal + transport - discount
+    // (invoice.total_amount on old invoices didn't include transport)
+    const trueTotal = Math.round((lineSubtotal + resolvedTransport - resolvedDiscount) * 100) / 100;
+    const balanceDue = Math.round((trueTotal - totalPaid) * 100) / 100;
+
+    // Debug — remove after verification
+    console.log(`[PINV-${invoice.suppl_inv_id}] sub=${lineSubtotal} transport=${resolvedTransport} discount=${resolvedDiscount} trueTotal=${trueTotal} paid=${totalPaid} balance=${balanceDue} | GRN.transport=${linkedGRN?.transportcharges}`);
 
     return {
       ...invoice,
       totalPaid,
       balanceDue,
+      trueTotal,
+      resolvedTransport,
+      resolvedDiscount,
+      lineSubtotal,
     };
 
   } catch (error: any) {

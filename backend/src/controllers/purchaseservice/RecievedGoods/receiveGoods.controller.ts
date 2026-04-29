@@ -6,8 +6,7 @@ import mqEmitter from '../../../utils/eventEmitter.js';
 export const receiveGoods = async (req: Request, res: Response, next: NextFunction) => {
   try {
     console.log(req.body)
-    const { poId, warehouseId, items, transportCharges, netTotal } = req.body;
-    const discount = undefined;
+    const { poId, warehouseId, items, discount, transportCharges, netTotal } = req.body;
 
     // 1. Basic Validation
     if (!poId || !warehouseId || !items || items.length === 0) {

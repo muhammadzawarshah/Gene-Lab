@@ -37,6 +37,17 @@ export const PurchaseInvoiceReportComponent = ({ data }: Props) => {
   const invoiceNo = data.suppl_invoice_number || `PBILL-${data.suppl_inv_id}`;
   const lines = data.supplierinvoiceline || [];
   const emptyRows = lines.length < 8 ? 8 - lines.length : 0;
+  const toNumber = (value: any) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  };
+  const formatCurrency = (amount: any) =>
+    toNumber(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const getLineTotal = (line: InvoiceLine) => {
+    const lineTotal = toNumber(line.line_total);
+    return lineTotal > 0 ? lineTotal : toNumber(line.quantity) * toNumber(line.unit_price);
+  };
+  const invoiceTotal = toNumber((data as any).trueTotal) || toNumber(data.total_amount) || lines.reduce((sum, line) => sum + getLineTotal(line), 0);
 
   return (
     <div
@@ -96,6 +107,8 @@ export const PurchaseInvoiceReportComponent = ({ data }: Props) => {
               <th className="border border-black px-1 py-1.5 w-10">S.No</th>
               <th className="border border-black px-2 py-1.5 text-left">Item Description</th>
               <th className="border border-black px-1 py-1.5 w-28">Qty</th>
+              <th className="border border-black px-1 py-1.5 w-24 text-right">Unit Price</th>
+              <th className="border border-black px-1 py-1.5 w-28 text-right">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -104,6 +117,8 @@ export const PurchaseInvoiceReportComponent = ({ data }: Props) => {
                 <td className="border border-black text-center">{index + 1}</td>
                 <td className="border border-black px-2 font-bold uppercase">{item.product?.name}</td>
                 <td className="border border-black text-center">{item.quantity}</td>
+                <td className="border border-black px-2 text-right font-mono">{formatCurrency(item.unit_price)}</td>
+                <td className="border border-black px-2 text-right font-mono font-bold">{formatCurrency(getLineTotal(item))}</td>
               </tr>
             ))}
             {Array.from({ length: emptyRows }).map((_, i) => (
@@ -111,9 +126,21 @@ export const PurchaseInvoiceReportComponent = ({ data }: Props) => {
                 <td className="border border-black text-center"></td>
                 <td className="border border-black px-2"></td>
                 <td className="border border-black text-center"></td>
+                <td className="border border-black"></td>
+                <td className="border border-black"></td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={4} className="border border-black px-2 py-2 text-right text-[10px] font-black uppercase bg-gray-100">
+                Total Price
+              </td>
+              <td className="border border-black px-2 py-2 text-right font-black font-mono bg-gray-100">
+                PKR {formatCurrency(invoiceTotal)}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 

@@ -163,7 +163,6 @@ export default function GRNListPage() {
                   <th className={thClass}>Batch Info</th>
                   <th className={thClass}>MFG Date</th>
                   <th className={thClass}>Expiry Date</th>
-                  <th className={thClass}>Discount</th>
                   <th className={thClass}>Net Total</th>
                   <th className={thClass}>Status</th>
                   <th className={`px-6 py-5 text-right ${labelClass} bg-white/[0.02] border-b border-white/5`}>Actions</th>
@@ -171,7 +170,7 @@ export default function GRNListPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading ? (
-                  <tr><td colSpan={8} className="py-32 text-center"><Loader2 className="animate-spin inline text-blue-600" size={40} /></td></tr>
+                  <tr><td colSpan={7} className="py-32 text-center"><Loader2 className="animate-spin inline text-blue-600" size={40} /></td></tr>
                 ) : filteredData.map((grn) => (
                   <tr key={grn.grn_id} className="group hover:bg-white/[0.02] transition-all">
                     <td className="px-4 py-6">
@@ -194,9 +193,6 @@ export default function GRNListPage() {
                       <span className="text-xs font-bold text-red-400/80 italic">
                         {grn.grnline?.[0]?.batch?.expiry_date ? format(new Date(grn.grnline[0].batch.expiry_date), 'dd-MM-yyyy') : '---'}
                       </span>
-                    </td>
-                    <td className="px-4 py-6 font-mono text-xs font-bold text-red-400">
-                      PKR {grn.discount || 0}
                     </td>
                     <td className="px-4 py-6 font-mono text-xs font-black text-emerald-400">
                       PKR {grn.nettotal || 0}

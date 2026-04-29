@@ -415,6 +415,9 @@ model supplierinvoice {
   amount_untaxed       Decimal?              @default(0.00) @db.Decimal(15, 2)
   tax_amount           Decimal?              @default(0.00) @db.Decimal(15, 2)
   total_amount         Decimal?              @default(0.00) @db.Decimal(15, 2)
+  discount             String?               @db.VarChar(20)
+  transportcharges     String?               @db.VarChar(20)
+  nettotal             String?               @db.VarChar(20)
   status               supplier_invoice_enum
   po_id                Int?
   paymentallocation    paymentallocation[]

@@ -364,8 +364,8 @@ export default function CustomerLedger() {
                         <th className="px-4 py-6">Invoice No</th>
                         <th className="px-8 py-6">Timestamp</th>
                         <th className="px-8 py-6">Narration</th>
-                        <th className="px-8 py-6 text-rose-500">Debit (+)</th>
-                        <th className="px-8 py-6 text-emerald-500">Credit (-)</th>
+                        <th className="px-8 py-6 text-rose-500">Debit</th>
+                        <th className="px-8 py-6 text-emerald-500">Credit</th>
                         <th className="px-8 py-6">Account Balance</th>
                       </tr>
                     </thead>
@@ -402,10 +402,10 @@ export default function CustomerLedger() {
                               </p>
                             </td>
                             <td className="px-8 py-8 text-xs font-black italic text-rose-500">
-                              {entry.debit > 0 ? `+ ${entry.debit.toLocaleString()}` : "—"}
+                              {entry.debit > 0 ? entry.debit.toLocaleString() : "—"}
                             </td>
                             <td className="px-8 py-8 text-xs font-black italic text-emerald-500">
-                              {entry.credit > 0 ? `- ${entry.credit.toLocaleString()}` : "—"}
+                              {entry.credit > 0 ? entry.credit.toLocaleString() : "—"}
                             </td>
                             <td className="px-8 py-8">
                               <span className="rounded-xl border border-white/5 bg-white/5 px-4 py-2 text-xs font-black tracking-tighter text-white shadow-inner">
@@ -501,3 +501,4 @@ export default function CustomerLedger() {
     </div>
   );
 }
+

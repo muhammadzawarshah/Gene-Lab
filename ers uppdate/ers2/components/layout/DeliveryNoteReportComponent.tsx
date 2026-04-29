@@ -8,6 +8,7 @@ interface DeliveryLineItem {
     product: { name: string; sku_code?: string };
     batch?: { batch_number: string; expiry_date?: string; manufacturing_date?: string };
     delivered_qty: any;
+    sale_price?: any;
     uom?: { name: string };
     remarks?: string;
 }
@@ -103,7 +104,9 @@ export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) =
                             <th className="border border-black px-1 py-1.5 w-16 text-center">MFG</th>
                             <th className="border border-black px-1 py-1.5 w-16 text-center">EXP</th>
                             <th className="border border-black px-1 py-1.5 w-12 text-center">UoM</th>
-                            <th className="border border-black px-1 py-1.5 w-16 text-right">Qty</th>
+                            <th className="border border-black px-1 py-1.5 w-12 text-right">Qty</th>
+                            <th className="border border-black px-1 py-1.5 w-20 text-right">Unit Price</th>
+                            <th className="border border-black px-1 py-1.5 w-24 text-right">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -120,12 +123,20 @@ export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) =
                                 </td>
                                 <td className="border border-black text-center">{item.uom?.name || 'Units'}</td>
                                 <td className="border border-black px-2 text-right font-semibold">{item.delivered_qty}</td>
+                                <td className="border border-black px-2 text-right">
+                                    {formatCurrency(item.sale_price ?? 0)}
+                                </td>
+                                <td className="border border-black px-2 text-right font-semibold">
+                                    {formatCurrency((parseFloat(item.delivered_qty) || 0) * (parseFloat(item.sale_price) || 0))}
+                                </td>
                             </tr>
                         ))}
 
                         {/* Empty Rows */}
                         {(data.deliverynoteline?.length || 0) < 8 && Array.from({ length: 8 - (data.deliverynoteline?.length || 0) }).map((_, i) => (
                             <tr key={`empty-${i}`} className="h-8">
+                                <td className="border border-black"></td>
+                                <td className="border border-black"></td>
                                 <td className="border border-black"></td>
                                 <td className="border border-black"></td>
                                 <td className="border border-black"></td>
@@ -140,17 +151,17 @@ export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) =
                     {/* TOTALS SECTION */}
                     <tfoot className="font-bold italic">
                         <tr>
-                            <td colSpan={5} className="border-none"></td>
+                            <td colSpan={7} className="border-none"></td>
                             <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">Discount:</td>
                             <td className="border border-black px-2 py-1 text-right">PKR {formatCurrency(data.discount || 0)}</td>
                         </tr>
                         <tr>
-                            <td colSpan={5} className="border-none"></td>
+                            <td colSpan={7} className="border-none"></td>
                             <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">Transport:</td>
                             <td className="border border-black px-2 py-1 text-right">PKR {formatCurrency(data.transportcharges || 0)}</td>
                         </tr>
                         <tr>
-                            <td colSpan={5} className="border-none"></td>
+                            <td colSpan={7} className="border-none"></td>
                             <td className="border border-black px-2 py-2 bg-gray-100 uppercase text-xs">Net Total</td>
                             <td className="border border-black px-2 py-2 text-right bg-gray-100 text-sm decoration-double underline">
                                 PKR {formatCurrency(data.nettotal || 0)}

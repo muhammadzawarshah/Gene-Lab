@@ -49,7 +49,29 @@ static async shipOrder(
   products: any[] 
 ) {
   return await prisma.$transaction(async (tx) => {
-    
+
+    // Pre-fetch latest purchase_price from GRN lines for all products in this SO
+    const soProductLines = await tx.salesorderline.findMany({
+      where: { so_id: Number(soId) },
+      select: { product_id: true }
+    });
+    const soProductIds = [...new Set(soProductLines.map((l: any) => l.product_id))];
+
+    const latestGrnLines = await tx.grnline.findMany({
+      where: {
+        product_id: { in: soProductIds },
+        purchase_price: { not: null }
+      },
+      orderBy: { grn_line_id: 'desc' },
+      select: { product_id: true, purchase_price: true }
+    });
+    const purchasePriceMap = new Map<string, number>();
+    for (const gl of latestGrnLines) {
+      if (gl.product_id && !purchasePriceMap.has(gl.product_id) && gl.purchase_price !== null) {
+        purchasePriceMap.set(gl.product_id, Number(gl.purchase_price));
+      }
+    }
+
     const orderLines = await tx.salesorderline.findMany({
       where: { so_id: Number(soId) }
     });
@@ -172,7 +194,7 @@ static async shipOrder(
             : orderLine.sale_price
               ? Number(orderLine.sale_price)
               : null,
-          purchase_price: null,
+          purchase_price: purchasePriceMap.get(orderLine.product_id) ?? null,
           remarks: "Shipped from warehouse"
         }
       });
@@ -273,7 +295,7 @@ static async shipOrder(
 
   // --- 3. VIEW METHOD (For the Eye Icon) ---
   static async getDeliveryDetails(id: string) {
-    return prisma.deliverynote.findFirst({
+    const result = await prisma.deliverynote.findFirst({
       where: { delivery_number: id },
       include: {
         salesorder: { include: { party: true } },
@@ -293,5 +315,8 @@ static async shipOrder(
         }
       }
     });
+    // Debug log — transportcharges verify karo
+    console.log('[getDeliveryDetails] transportcharges:', result?.transportcharges, '| discount:', result?.discount, '| nettotal:', result?.nettotal);
+    return result;
   }
 }
