@@ -192,7 +192,7 @@ export default function Sidebar() {
                           </div>
                         ) : (
                           <button
-                            onClick={() => router.push(item.href)}
+                            onClick={() => item.href && router.push(item.href)}
                             className={cn(
                               "block w-full rounded-xl px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.14em] transition-all",
                               pathname === item.href
