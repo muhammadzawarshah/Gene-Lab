@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Gene Labs",
   description: "Gene Labs is a Pharma sutucal company focused on medical innovation and research.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/gene-logo.png",
+  },
 };
 
 export default function RootLayout({

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
-import img from '@/public/logo.png';
+import geneLogo from '@/public/gene-logo.png';
 import { 
   Lock, Mail, ArrowRight, Eye, EyeOff, 
   Loader2, ShieldAlert, ShieldCheck 
@@ -67,8 +67,8 @@ export default function LoginScreen() {
         
         login(response.data.token, response.data.user);
       }
-    } catch (err: any) {
-      const status = err.response?.status;
+    } catch (err: unknown) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
       let msg = "Authorization Failed: Access Denied";
 
       if (status === 429) msg = "DDoS_PROTECTION: Rate limit exceeded.";
@@ -101,12 +101,17 @@ export default function LoginScreen() {
       >
         {/* LOGO SECTION */}
         <div className="flex flex-col items-center mb-10 text-center">
-          <motion.div 
-            whileHover={{ rotate: 180, scale: 1.1 }}
-            transition={{ duration: 0.6 }}
-            className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(37,99,235,0.4)] mb-4 cursor-none"
+          <motion.div
+            whileHover={{ scale: 1.03 }}
+            transition={{ duration: 0.3 }}
+            className="mb-5 flex h-28 w-full max-w-[320px] items-center justify-center px-4 drop-shadow-[0_0_24px_rgba(37,99,235,0.24)]"
           >
-            <Image src={img} alt='GeniLabs Logo' priority />
+            <Image
+              src={geneLogo}
+              alt="Gene Laboratories logo"
+              priority
+              className="h-auto w-full object-contain"
+            />
           </motion.div>
           <h1 className="text-3xl font-black text-white tracking-tighter italic uppercase">
             Geni<span className="text-cyan-400">Labs</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,12 +15,19 @@ import {
 import Cookies from "js-cookie";
 import { useAuth } from "@/app/context/authcontext";
 import ThemeToggle from "./theme-toggle";
+import geneLogo from "@/public/gene-logo.png";
+
+type ActiveUser = {
+  name?: string;
+  useremail?: string;
+  role?: string;
+};
 
 export default function Navbar() {
   const { logout } = useAuth();
   const pathname = usePathname();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [activeUser, setActiveUser] = useState<any>(null);
+  const [activeUser, setActiveUser] = useState<ActiveUser | null>(null);
   const [isSyncing, setIsSyncing] = useState(true);
 
   useEffect(() => {
@@ -57,24 +65,35 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="app-topbar-surface flex h-20 items-center justify-between gap-4 rounded-[1.75rem] px-4 md:px-6">
-      <div className="min-w-0">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="app-soft-badge inline-flex items-center gap-2 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.28em] text-blue-500">
-            <Sparkles size={10} />
-            Refined Workspace
-          </span>
+    <nav className="app-topbar-surface relative z-[90] flex h-20 items-center justify-between gap-4 rounded-[1.75rem] px-4 md:px-6">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className="hidden h-12 w-28 flex-shrink-0 items-center justify-center px-2 drop-shadow-[0_0_14px_rgba(37,99,235,0.22)] sm:flex">
+          <Image
+            src={geneLogo}
+            alt="Gene Laboratories logo"
+            priority
+            className="h-auto w-full object-contain"
+          />
         </div>
 
-        <h1 className="truncate text-sm font-black uppercase tracking-[0.14em] text-white md:text-lg">
-          Gene Labs
-          <span className="mx-2 text-slate-600">/</span>
-          <span className="text-blue-500">{currentPathLabel}</span>
-        </h1>
+        <div className="min-w-0">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="app-soft-badge inline-flex items-center gap-2 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.28em] text-blue-500">
+              <Sparkles size={10} />
+              Refined Workspace
+            </span>
+          </div>
 
-        <p className="mt-1 hidden text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 sm:block">
-          Clean layout, better spacing, lighter visual rhythm
-        </p>
+          <h1 className="truncate text-sm font-black uppercase tracking-[0.14em] text-white md:text-lg">
+            Gene Labs
+            <span className="mx-2 text-slate-600">/</span>
+            <span className="text-blue-500">{currentPathLabel}</span>
+          </h1>
+
+          <p className="mt-1 hidden text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 sm:block">
+            Clean layout, better spacing, lighter visual rhythm
+          </p>
+        </div>
       </div>
 
       <div className="relative flex items-center gap-3">
@@ -109,7 +128,7 @@ export default function Navbar() {
         <AnimatePresence>
           {isDropdownOpen && (
             <>
-              <div className="fixed inset-0 z-2" onClick={() => setIsDropdownOpen(false)} />
+              <div className="fixed inset-0 z-[900]" onClick={() => setIsDropdownOpen(false)} />
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}

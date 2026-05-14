@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/app/context/authcontext";
-import img from "@/public/logo.png";
+import geneLogo from "@/public/gene-logo.png";
 import {
   ChevronRight,
   ChevronDown,
@@ -14,7 +14,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAVIGATION_CONFIG } from "../../lib/NavigationData";
+import { NAVIGATION_CONFIG, type DropdownItem, type MenuItem } from "../../lib/NavigationData";
 
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -27,16 +27,16 @@ export default function Sidebar() {
 
   const menuItems = useMemo(() => {
     if (!role) return [];
-    return (NAVIGATION_CONFIG as Record<string, unknown[]>)[role] || [];
+    return NAVIGATION_CONFIG[role] || [];
   }, [role]);
 
   useEffect(() => {
     if (!menuItems.length) return;
 
-    menuItems.forEach((section: any) => {
-      const hasActiveChild = section.items?.some((item: any) => {
+    menuItems.forEach((section) => {
+      const hasActiveChild = section.items?.some((item) => {
         if (item.type === "nested") {
-          const hasActiveSub = item.subItems?.some((sub: any) => pathname === sub.href);
+          const hasActiveSub = item.subItems?.some((sub) => pathname === sub.href);
           if (hasActiveSub) setOpenNested(item.id || null);
           return hasActiveSub;
         }
@@ -72,8 +72,8 @@ export default function Sidebar() {
     >
       <div className="border-b border-white/10 px-5 py-6">
         <div className="flex items-center gap-3">
-          <div className="relative h-11 w-11 flex-shrink-0 rounded-2xl bg-white/5 p-2 ring-1 ring-white/10">
-            <Image src={img} alt="logo" fill className="object-contain p-2" />
+          <div className="relative h-12 w-12 flex-shrink-0 drop-shadow-[0_0_14px_rgba(37,99,235,0.24)]">
+            <Image src={geneLogo} alt="Gene Laboratories logo" fill className="object-contain" />
           </div>
 
           {!isCollapsed && (
@@ -91,14 +91,14 @@ export default function Sidebar() {
       </div>
 
       <nav className="custom-scrollbar flex-1 space-y-2 overflow-y-auto px-3 py-4">
-        {menuItems.map((section: any) => {
+        {menuItems.map((section: MenuItem) => {
           const isDropdown = section.type === "dropdown";
           const isOpen = openSection === section.id;
           const Icon = section.icon || LayoutDashboard;
           const isActive =
-            section.items?.some((item: any) => {
+            section.items?.some((item) => {
               if (item.type === "nested") {
-                return item.subItems?.some((sub: any) => pathname === sub.href);
+                return item.subItems?.some((sub) => pathname === sub.href);
               }
 
               return pathname === item.href;
@@ -151,12 +151,12 @@ export default function Sidebar() {
                     exit={{ height: 0, opacity: 0 }}
                     className="ml-5 overflow-hidden border-l border-white/10 pl-3"
                   >
-                    {section.items?.map((item: any, index: number) => (
+                    {section.items?.map((item: DropdownItem, index: number) => (
                       <div key={item.id ?? item.label ?? index} className="mt-1">
                         {item.type === "nested" ? (
                           <div>
                             <button
-                              onClick={(event) => toggleNested(event, item.id!)}
+                              onClick={(event) => item.id && toggleNested(event, item.id)}
                               className={cn(
                                 "flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all",
                                 openNested === item.id
@@ -175,7 +175,7 @@ export default function Sidebar() {
                             </button>
 
                             {openNested === item.id &&
-                              item.subItems?.map((sub: any) => (
+                              item.subItems?.map((sub) => (
                                 <button
                                   key={sub.href}
                                   onClick={() => router.push(sub.href)}

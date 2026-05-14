@@ -66,7 +66,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="pointer-events-none absolute left-0 top-0 h-72 w-72 rounded-full bg-sky-500/10 blur-[120px]" />
         <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-full bg-blue-500/10 blur-[120px]" />
 
-        <div className="flex items-center gap-3 px-3 pt-3 md:px-6 md:pt-6">
+        <div className="relative z-[80] flex items-center gap-3 px-3 pt-3 md:px-6 md:pt-6">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="app-soft-badge flex h-14 w-14 items-center justify-center rounded-[1.5rem] text-slate-500 transition-all hover:border-blue-500/25 hover:text-white md:hidden"
