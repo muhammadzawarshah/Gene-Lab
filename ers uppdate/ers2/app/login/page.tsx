@@ -114,7 +114,7 @@ export default function LoginScreen() {
             />
           </motion.div>
           <h1 className="text-3xl font-black text-white tracking-tighter italic uppercase">
-            Geni<span className="text-cyan-400">Labs</span>
+            Gene<span className="text-cyan-400">Labs</span>
           </h1>
           <p className="text-[10px] text-slate-500 font-mono tracking-[0.5em] uppercase mt-2">
             Medical Innovation & Research

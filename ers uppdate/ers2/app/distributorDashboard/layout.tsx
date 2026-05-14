@@ -98,7 +98,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Neural Net Active
             </span>
             <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-600">
-              GeniLabs v2.0
+              GeneLabs v2.0
             </span>
           </div>
         </div>
