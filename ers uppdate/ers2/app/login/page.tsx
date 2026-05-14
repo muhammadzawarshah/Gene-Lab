@@ -54,7 +54,7 @@ export default function LoginScreen() {
         {
           headers: {
             'x-api-key': process.env.NEXT_PUBLIC_API_KEY,
-            'x-requested-with': 'GeniLabs-Core'
+            'x-requested-with': 'GeneLabs-Core'
           }
         }
       );
@@ -150,7 +150,7 @@ export default function LoginScreen() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  placeholder="operator@genilabs.com"
+                  placeholder="operator@geneLabs.com"
                   className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm text-white focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/20 outline-none transition-all placeholder:text-slate-700 font-mono"
                 />
               </div>
@@ -228,7 +228,7 @@ export default function LoginScreen() {
 
       {/* OVERLAY SYSTEM STATUS */}
       <div className="absolute bottom-4 left-0 w-full flex justify-between px-6 pointer-events-none opacity-20">
-        <span className="text-[8px] font-mono text-slate-500 tracking-tighter uppercase">GeniLabs Interface</span>
+        <span className="text-[8px] font-mono text-slate-500 tracking-tighter uppercase">GeneLabs Interface</span>
         <span className="text-[8px] font-mono text-slate-500 tracking-tighter uppercase">Auth: RSA-4096-AES</span>
       </div>
     </div>
