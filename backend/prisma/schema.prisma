@@ -62,6 +62,9 @@ model customerinvoice {
   cust_invoice_date   DateTime              @db.Date
   cust_inv_due_date   DateTime?             @db.Date
   total_amount        Decimal?              @default(0.00) @db.Decimal(15, 2)
+  discount            String?               @db.VarChar(20)
+  transportcharges    String?               @db.VarChar(20)
+  nettotal            String?               @db.VarChar(20)
   status              customer_invoice_enum
   so_id               Int?
   party               party                 @relation(fields: [party_id_customer], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
