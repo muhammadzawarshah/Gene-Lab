@@ -26,13 +26,30 @@ export class BatchService {
   }
 
   static async createBatch(data: {
+    product_id?: string;
     batch_number: string;
     manufacturing_date?: string;
     expiry_date?: string;
     status?: string;
     location_id?: number;
-    items: { product_id: string; received_quantity: number; available_quantity: number }[];
+    received_quantity?: number;
+    available_quantity?: number;
+    items?: { product_id: string; received_quantity: number; available_quantity: number }[];
   }) {
+    const items = data.items?.length
+      ? data.items
+      : data.product_id
+        ? [{
+            product_id: data.product_id,
+            received_quantity: Number(data.received_quantity || 0),
+            available_quantity: Number(data.available_quantity ?? data.received_quantity ?? 0),
+          }]
+        : [];
+
+    if (!items.length) {
+      throw new Error('At least one batch item is required');
+    }
+
     return await prisma.batch.create({
       data: {
         batch_number: data.batch_number,
@@ -41,7 +58,7 @@ export class BatchService {
         status: data.status || 'ACTIVE',
         location_id: data.location_id ? Number(data.location_id) : null,
         batchitem: {
-          create: data.items.map(i => ({
+          create: items.map(i => ({
             product_id: i.product_id,
             received_quantity: Number(i.received_quantity),
             available_quantity: Number(i.available_quantity ?? i.received_quantity),
@@ -53,15 +70,28 @@ export class BatchService {
   }
 
   static async updateBatch(id: number, data: {
+    product_id?: string;
     batch_number?: string;
     manufacturing_date?: string;
     expiry_date?: string;
     status?: string;
     location_id?: number;
+    received_quantity?: number;
+    available_quantity?: number;
     items?: { product_id: string; received_quantity: number; available_quantity: number }[];
   }) {
     // Delete old items and recreate — simplest safe approach
     await prisma.batchitem.deleteMany({ where: { batch_id: id } });
+
+    const items = data.items?.length
+      ? data.items
+      : data.product_id
+        ? [{
+            product_id: data.product_id,
+            received_quantity: Number(data.received_quantity || 0),
+            available_quantity: Number(data.available_quantity ?? data.received_quantity ?? 0),
+          }]
+        : [];
 
     return await prisma.batch.update({
       where: { batch_id: id },
@@ -71,8 +101,8 @@ export class BatchService {
         expiry_date: data.expiry_date ? new Date(data.expiry_date) : undefined,
         status: data.status,
         location_id: data.location_id ? Number(data.location_id) : undefined,
-        batchitem: data.items ? {
-          create: data.items.map(i => ({
+        batchitem: items.length ? {
+          create: items.map(i => ({
             product_id: i.product_id,
             received_quantity: Number(i.received_quantity),
             available_quantity: Number(i.available_quantity ?? i.received_quantity),

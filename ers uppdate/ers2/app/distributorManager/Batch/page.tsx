@@ -59,13 +59,14 @@ export default function BatchPage() {
     };
 
     const openEditForm = (batch: any) => {
+        const firstItem = batch.batchitem?.[0];
         setForm({
-            product_id: batch.product_id || '',
+            product_id: firstItem?.product_id || batch.product_id || '',
             batch_number: batch.batch_number || '',
             manufacturing_date: batch.manufacturing_date ? batch.manufacturing_date.split('T')[0] : '',
             expiry_date: batch.expiry_date ? batch.expiry_date.split('T')[0] : '',
-            received_quantity: String(batch.received_quantity || ''),
-            available_quantity: String(batch.available_quantity || ''),
+            received_quantity: String(firstItem?.received_quantity ?? batch.received_quantity ?? ''),
+            available_quantity: String(firstItem?.available_quantity ?? batch.available_quantity ?? ''),
             status: batch.status || 'ACTIVE',
             location_id: batch.location_id ? String(batch.location_id) : '',
         });
@@ -85,12 +86,24 @@ export default function BatchPage() {
         }
         setIsSaving(true);
         const tId = toast.loading(isEditing ? 'Updating batch...' : 'Creating batch...');
+        const payload = {
+            batch_number: form.batch_number,
+            manufacturing_date: form.manufacturing_date || undefined,
+            expiry_date: form.expiry_date || undefined,
+            status: form.status,
+            location_id: form.location_id ? Number(form.location_id) : undefined,
+            items: [{
+                product_id: form.product_id,
+                received_quantity: Number(form.received_quantity || 0),
+                available_quantity: Number(form.available_quantity || form.received_quantity || 0),
+            }],
+        };
         try {
             if (isEditing && editId !== null) {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/batch/${editId}`, form, config);
+                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/batch/${editId}`, payload, config);
                 toast.success('Batch updated!', { id: tId });
             } else {
-                await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/batch`, form, config);
+                await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/batch`, payload, config);
                 toast.success('Batch created!', { id: tId });
             }
             setIsFormOpen(false);
@@ -117,11 +130,13 @@ export default function BatchPage() {
     const filtered = useMemo(() => {
         const q = searchQuery.toLowerCase();
         return batches.filter(b => {
-            const prodName = b.product?.name?.toLowerCase() || '';
+            const prodName = (b.batchitem?.[0]?.product?.name || b.product?.name || '').toLowerCase();
             const bNum = (b.batch_number || '').toLowerCase();
             return prodName.includes(q) || bNum.includes(q);
         });
     }, [batches, searchQuery]);
+
+    const getFirstBatchItem = (batch: any) => batch.batchitem?.[0];
 
     const formatDate = (d: string) => d ? d.split('T')[0] : '---';
 
@@ -210,7 +225,9 @@ export default function BatchPage() {
                                 {filtered.map((batch: any, idx) => (
                                     <tr key={batch.batch_id} className="hover:bg-white/[0.01] transition-colors group">
                                         <td className="pl-8 py-4 text-[10px] font-bold text-slate-700">{idx + 1}</td>
-                                        <td className={`${tdClass} font-bold text-white`}>{batch.product?.name || '---'}</td>
+                                        <td className={`${tdClass} font-bold text-white`}>
+                                            {getFirstBatchItem(batch)?.product?.name || batch.product?.name || '---'}
+                                        </td>
                                         <td className={tdClass}>
                                             <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-lg text-[11px] font-mono font-bold">
                                                 {batch.batch_number}
@@ -220,8 +237,12 @@ export default function BatchPage() {
                                         <td className={`${tdClass} font-mono text-[12px]`}>
                                             <span className="text-red-400">{formatDate(batch.expiry_date)}</span>
                                         </td>
-                                        <td className={`${tdClass} font-bold text-center`}>{batch.received_quantity || 0}</td>
-                                        <td className={`${tdClass} font-bold text-center text-emerald-400`}>{batch.available_quantity || 0}</td>
+                                        <td className={`${tdClass} font-bold text-center`}>
+                                            {getFirstBatchItem(batch)?.received_quantity ?? batch.received_quantity ?? 0}
+                                        </td>
+                                        <td className={`${tdClass} font-bold text-center text-emerald-400`}>
+                                            {getFirstBatchItem(batch)?.available_quantity ?? batch.available_quantity ?? 0}
+                                        </td>
                                         <td className={tdClass}>
                                             <span className={`px-3 py-1 rounded-full text-[11px] font-black border uppercase ${statusColor[batch.status] || 'text-slate-400 bg-slate-800 border-slate-700'}`}>
                                                 {batch.status}
