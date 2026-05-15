@@ -66,9 +66,6 @@ export class FinanceService {
           party_id_customer: delivery.salesorder.party_id_customer,
           cust_invoice_date: new Date(),
           total_amount:      dnNetTotal,       // ← DN nettotal (with transport)
-          discount:          String(dnDiscount),
-          transportcharges:  String(dnTransport),
-          nettotal:          String(dnNetTotal),
           status:            'POSTED',
         } as any
       });
