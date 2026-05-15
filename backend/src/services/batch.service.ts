@@ -46,10 +46,6 @@ export class BatchService {
           }]
         : [];
 
-    if (!items.length) {
-      throw new Error('At least one batch item is required');
-    }
-
     return await prisma.batch.create({
       data: {
         batch_number: data.batch_number,
@@ -57,13 +53,13 @@ export class BatchService {
         expiry_date: data.expiry_date ? new Date(data.expiry_date) : null,
         status: data.status || 'ACTIVE',
         location_id: data.location_id ? Number(data.location_id) : null,
-        batchitem: {
+        batchitem: items.length ? {
           create: items.map(i => ({
             product_id: i.product_id,
             received_quantity: Number(i.received_quantity),
             available_quantity: Number(i.available_quantity ?? i.received_quantity),
           }))
-        }
+        } : undefined
       },
       include: batchInclude
     });

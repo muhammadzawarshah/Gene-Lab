@@ -80,8 +80,8 @@ export default function BatchPage() {
     };
 
     const handleSubmit = async () => {
-        if (!form.product_id || !form.batch_number) {
-            toast.error('Product and Batch Number are required.');
+        if (!form.batch_number) {
+            toast.error('Batch Number is required.');
             return;
         }
         setIsSaving(true);
@@ -92,11 +92,11 @@ export default function BatchPage() {
             expiry_date: form.expiry_date || undefined,
             status: form.status,
             location_id: form.location_id ? Number(form.location_id) : undefined,
-            items: [{
+            items: form.product_id ? [{
                 product_id: form.product_id,
                 received_quantity: Number(form.received_quantity || 0),
                 available_quantity: Number(form.available_quantity || form.received_quantity || 0),
-            }],
+            }] : undefined,
         };
         try {
             if (isEditing && editId !== null) {
@@ -304,7 +304,7 @@ export default function BatchPage() {
                             <div className="md:col-span-2">
                                 <label className={labelClass}>
                                     <Package size={10} className="inline mr-1" />
-                                    Product <span className="text-red-500">*</span>
+                                    Product
                                 </label>
                                 <div className="relative">
                                     <select
@@ -393,7 +393,7 @@ export default function BatchPage() {
                         <div className="mt-10 flex flex-col md:flex-row items-center justify-between gap-5 border-t border-white/5 pt-8">
                             <div className="flex items-center gap-2 text-slate-600 italic text-[10px] font-bold uppercase tracking-widest">
                                 <AlertCircle size={14} className="text-amber-500" />
-                                Required fields marked with *
+                                Batch Number is required. Product can be added later.
                             </div>
                             <div className="flex gap-3 w-full md:w-auto">
                                 <button
