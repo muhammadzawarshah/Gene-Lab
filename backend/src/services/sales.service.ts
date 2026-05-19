@@ -93,12 +93,19 @@ export class SalesService {
       const productDefaults = await SalesService.getOrderProductDefaults(tx, itemProductIds);
 
       // 1. Create Order
+      const tpDiscount = SalesService.parseOptionalNumber(data.financials?.tpDiscount) ?? 0;
+      const ddDiscount = SalesService.parseOptionalNumber(data.financials?.ddDiscount) ?? 0;
+      const otherDiscount = SalesService.parseOptionalNumber(data.financials?.otherDiscount) ?? 0;
+
       const order = await tx.salesorder.create({
         data: {
           party_id_customer: data.customerId,
           order_date: new Date(),
           status: 'DRAFT',
-          total_amount: data.financials.netTotal
+          total_amount: data.financials.netTotal,
+          tp_discount: tpDiscount,
+          dd_discount: ddDiscount,
+          other_discount: otherDiscount
         } as any
       });
 
@@ -150,7 +157,10 @@ export class SalesService {
           party_id_customer: party.party_id,
           order_date: new Date(),
           status: 'DRAFT',
-          total_amount: data.totalAmount
+          total_amount: data.totalAmount,
+          tp_discount: SalesService.parseOptionalNumber(data.tpDiscount) ?? 0,
+          dd_discount: SalesService.parseOptionalNumber(data.ddDiscount) ?? 0,
+          other_discount: SalesService.parseOptionalNumber(data.otherDiscount) ?? 0
         } as any
       });
 
@@ -486,7 +496,10 @@ export class SalesService {
           status: data.status ?? existingOrder.status,
           total_amount: data.financials?.netTotal
             ? parseFloat(data.financials.netTotal)
-            : existingOrder.total_amount
+            : existingOrder.total_amount,
+          tp_discount: data.financials?.tpDiscount !== undefined ? Number(data.financials.tpDiscount || 0) : existingOrder.tp_discount,
+          dd_discount: data.financials?.ddDiscount !== undefined ? Number(data.financials.ddDiscount || 0) : existingOrder.dd_discount,
+          other_discount: data.financials?.otherDiscount !== undefined ? Number(data.financials.otherDiscount || 0) : existingOrder.other_discount
         }
       });
 

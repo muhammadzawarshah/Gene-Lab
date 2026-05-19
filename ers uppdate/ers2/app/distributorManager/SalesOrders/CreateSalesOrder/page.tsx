@@ -26,6 +26,8 @@ interface SOItem {
   amount: number;
 }
 
+type DiscountType = '' | 'tp' | 'dd' | 'other';
+
 const emptyRow = (): SOItem => ({
   category_id: '', product_id: '',
   uom_id: 0, total_unit: 0, sale_price: 0, amount: 0,
@@ -38,6 +40,8 @@ export default function CreateSalesOrder() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [productsMap, setProductsMap] = useState<Record<string, Product[]>>({});
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
+  const [discountType, setDiscountType] = useState<DiscountType>('');
+  const [discountPercent, setDiscountPercent] = useState('');
 
   const currentUserId = Cookies.get('userId') || 'ADMIN_USER';
   const token = Cookies.get('auth_token');
@@ -140,6 +144,12 @@ export default function CreateSalesOrder() {
   };
 
   const grossTotal = useMemo(() => rows.reduce((s, r) => s + (r.amount || 0), 0), [rows]);
+  const safeDiscountPercent = useMemo(() => {
+    if (!discountType) return 0;
+    return Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+  }, [discountPercent, discountType]);
+  const discountAmount = useMemo(() => (grossTotal * safeDiscountPercent) / 100, [grossTotal, safeDiscountPercent]);
+  const netTotal = useMemo(() => Math.max(grossTotal - discountAmount, 0), [discountAmount, grossTotal]);
   const stockIssues = useMemo(() => {
     return rows
       .filter((row) => row.product_id && Number(row.total_unit) > Number(stockMap[row.product_id] || 0))
@@ -167,12 +177,22 @@ export default function CreateSalesOrder() {
           ...r,
           approved_rate: r.sale_price,
         })),
-        financials: { grossTotal, taxId: null, taxAmount: 0, netTotal: grossTotal }
+        financials: {
+          grossTotal,
+          taxId: null,
+          taxAmount: 0,
+          netTotal,
+          tpDiscount: discountType === 'tp' ? safeDiscountPercent : 0,
+          ddDiscount: discountType === 'dd' ? safeDiscountPercent : 0,
+          otherDiscount: discountType === 'other' ? safeDiscountPercent : 0,
+        }
       }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast.success("Sales order submitted", { icon: <ShieldCheck className="text-emerald-500" /> });
       setSelectedPartyId('');
       setRows([emptyRow(), emptyRow(), emptyRow()]);
+      setDiscountType('');
+      setDiscountPercent('');
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Submission failed");
     } finally {
@@ -310,7 +330,55 @@ export default function CreateSalesOrder() {
           </table>
         </div>
 
-        <div className="p-10 bg-[#020617] border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="p-10 bg-[#020617] border-t border-white/5 flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_180px_180px]">
+            <div className="relative">
+              <label className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-500">
+                Discount Type
+              </label>
+              <select
+                className={inpCls}
+                value={discountType}
+                onChange={(e) => {
+                  setDiscountType(e.target.value as DiscountType);
+                  if (!e.target.value) setDiscountPercent('');
+                }}
+              >
+                <option value="">No Discount</option>
+                <option value="tp">TP Discount</option>
+                <option value="dd">DD Discount</option>
+                <option value="other">Other Discount</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute bottom-3.5 right-4 text-slate-500" size={16} />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-500">
+                Discount %
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                disabled={!discountType}
+                className={`${inpCls} text-right font-mono disabled:opacity-40`}
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <div className="w-full rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Discount Amount</p>
+                <p className="mt-1 text-right text-xs font-black text-rose-300">PKR {discountAmount.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-4 bg-white/5 px-8 py-4 rounded-full border border-white/5">
             <Calculator className="text-blue-500" size={20} />
             <div>
@@ -318,8 +386,20 @@ export default function CreateSalesOrder() {
               <p className="text-sm font-black text-white">PKR {grossTotal.toLocaleString()}</p>
             </div>
           </div>
+          <div className="flex items-center gap-4 bg-emerald-500/10 px-8 py-4 rounded-full border border-emerald-500/10">
+            <Wallet className="text-emerald-400" size={20} />
+            <div>
+              <p className="text-[9px] font-black text-emerald-400/70 uppercase tracking-widest leading-none">Net Total</p>
+              <p className="text-sm font-black text-white">PKR {netTotal.toLocaleString()}</p>
+            </div>
+          </div>
+          </div>
           <div className="flex gap-4 w-full md:w-auto">
-            <button type="button" onClick={() => setRows([emptyRow(), emptyRow(), emptyRow()])}
+            <button type="button" onClick={() => {
+              setRows([emptyRow(), emptyRow(), emptyRow()]);
+              setDiscountType('');
+              setDiscountPercent('');
+            }}
               className="flex-1 md:flex-none bg-white/5 text-slate-500 font-black px-10 py-5 rounded-2xl uppercase text-[10px] tracking-widest border border-white/5 hover:bg-rose-500/10 hover:text-rose-500 transition-all">
               Clear Form
             </button>
@@ -327,6 +407,7 @@ export default function CreateSalesOrder() {
               className="flex-2 md:flex-none bg-blue-600 hover:bg-blue-500 text-white font-black px-16 py-5 rounded-2xl uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20 disabled:opacity-50">
               {isSubmitting ? <Loader2 className="animate-spin" /> : <><Wallet size={18} /> Deploy Sales Order</>}
             </button>
+          </div>
           </div>
         </div>
       </form>

@@ -348,6 +348,9 @@ model salesorder {
   expected_del_date DateTime?           @db.Date
   status            purchase_order_enum
   total_amount      Decimal?            @default(0.00) @db.Decimal(15, 2)
+  tp_discount       Decimal?            @default(0.00) @db.Decimal(5, 2)
+  dd_discount       Decimal?            @default(0.00) @db.Decimal(5, 2)
+  other_discount    Decimal?            @default(0.00) @db.Decimal(5, 2)
   customerinvoice   customerinvoice[]
   deliverynote      deliverynote[]
   party             party               @relation(fields: [party_id_customer], references: [party_id], onDelete: NoAction, onUpdate: NoAction)
