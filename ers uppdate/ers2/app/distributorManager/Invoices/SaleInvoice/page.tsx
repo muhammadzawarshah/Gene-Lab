@@ -26,6 +26,8 @@ interface OrderItem {
 interface OrderReference {
   _id: string; 
   deliveryNumber: string;
+  displayId: string;
+  soId?: number | string | null;
 }
 
 interface SelectedOrderDetails {
@@ -63,20 +65,87 @@ export default function CreateInvoice() {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
   };
 
+  const getDeliveryValue = (ord: any) =>
+    String(ord.delivery_number || ord.deliveryNumber || ord._id || "");
+
+  const getSOId = (ord: any) => ord.so_id ?? ord.salesorder?.so_id ?? null;
+
+  const getSalesOrderDisplayId = (ord: any) => {
+    const soId = getSOId(ord);
+    return soId ? `SO ID #${soId}` : getDeliveryValue(ord);
+  };
+
+  const hasGeneratedSaleInvoice = (ord: any) =>
+    Boolean(
+      ord.is_invoiced ||
+      ord.invoice_generated ||
+      ord.cust_inv_id ||
+      ord.customer_invoice_id ||
+      ord.invoice_id ||
+      (Array.isArray(ord.customerinvoice) && ord.customerinvoice.length > 0) ||
+      (Array.isArray(ord.customerInvoice) && ord.customerInvoice.length > 0) ||
+      (Array.isArray(ord.invoice) && ord.invoice.length > 0) ||
+      (Array.isArray(ord.salesorder?.customerinvoice) && ord.salesorder.customerinvoice.length > 0)
+    );
+
   const fetchOrderList = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await api.get('/api/v1/finance/invoice/dns/available');
+      const [res, invoiceRes] = await Promise.all([
+        api.get('/api/v1/finance/invoice/dns/available'),
+        api.get('/api/v1/finance/getinvoice').catch(() => ({ data: { data: [] } }))
+      ]);
       const dataArray = Array.isArray(res.data.data) ? res.data.data : [];
+      const invoiceArray = Array.isArray(invoiceRes.data.data) ? invoiceRes.data.data : [];
+      const invoicedSoIds = new Set(
+        invoiceArray
+          .map((invoice: any) => Number(invoice.so_id))
+          .filter((soId: number) => Number.isFinite(soId))
+      );
 
-      const formattedList = dataArray.map((ord: any) => ({
-        _id: ord.delivery_number,
-        deliveryNumber: ord.delivery_number
-      }));
+      const candidates = dataArray.filter((ord: any) => {
+        if (hasGeneratedSaleInvoice(ord)) return false;
+        const soId = getSOId(ord);
+        return !(soId && invoicedSoIds.has(Number(soId)));
+      });
 
-      setOrderList(formattedList);
+      const checkedList = await Promise.all(
+        candidates.map(async (ord: any) => {
+          const deliveryValue = getDeliveryValue(ord);
+          const directSoId = getSOId(ord);
+          if (!deliveryValue) return null;
+          if (!directSoId) {
+            try {
+              const detailsRes = await api.get(`/api/v1/distribution/specificdel/${deliveryValue}`);
+              const detail = detailsRes.data.data || {};
+              const detailSoId = getSOId(detail);
+              if (detailSoId && invoicedSoIds.has(Number(detailSoId))) return null;
+              return { ...ord, so_id: detailSoId };
+            } catch {
+              return ord;
+            }
+          }
+          return ord;
+        })
+      );
+
+      const soOptions = new Map<string, OrderReference>();
+      checkedList.filter(Boolean).forEach((ord: any) => {
+        const deliveryValue = getDeliveryValue(ord);
+        const soId = getSOId(ord);
+        const key = soId ? `SO-${soId}` : deliveryValue;
+        if (!deliveryValue || soOptions.has(key)) return;
+        soOptions.set(key, {
+          _id: deliveryValue,
+          deliveryNumber: deliveryValue,
+          displayId: getSalesOrderDisplayId(ord),
+          soId
+        });
+      });
+
+      setOrderList(Array.from(soOptions.values()));
     } catch (err) {
-      toast.error("Failed to load delivery notes");
+      toast.error("Failed to load sales orders");
     }
   }, [api, token]);
 
@@ -164,7 +233,7 @@ export default function CreateInvoice() {
 
   return (
     <div className="text-white p-4 md:p-10 pb-24">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER */}
       <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-white/5 pb-10">
@@ -179,16 +248,16 @@ export default function CreateInvoice() {
         </div>
 
         <div className="relative w-full md:w-96 group">
-          <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-3 block ml-2">Select Delivery Note</label>
+          <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-3 block ml-2">Select Sales Order</label>
           <div className="relative">
             <select 
               className="w-full bg-slate-900 border border-white/10 rounded-2xl py-5 pl-6 pr-12 text-xs font-black appearance-none outline-none focus:border-emerald-500 transition-all cursor-pointer shadow-2xl uppercase"
               value={selectedDN}
               onChange={(e) => setSelectedDN(e.target.value)}
             >
-              <option value="">-- SEARCH DELIVERY NUMBER --</option>
+              <option value="">-- SEARCH SALES ORDER ID --</option>
               {orderList.map((order) => (
-                <option key={order._id} value={order._id}>{order.deliveryNumber}</option>
+                <option key={order._id} value={order._id}>{order.displayId}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={20} />

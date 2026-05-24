@@ -224,7 +224,7 @@ export default function VendorLedger() {
 
   return (
     <div className="relative min-h-screen overflow-hidden p-4 font-sans text-slate-300 md:p-10">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       <div className="pointer-events-none absolute right-10 top-5 flex items-center gap-2 opacity-20">
         <ShieldCheck size={14} className="text-amber-500" />

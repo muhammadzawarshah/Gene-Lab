@@ -117,6 +117,35 @@ export const getBillingSyncStatus = async (req: Request, res: Response) => {
   }
 };
 
+export const getCustomerMonthlySalesReport = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { userId, month } = req.params;
+    const data = await SalesService.getCustomerMonthlySalesReport(String(userId), String(month));
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getManagerMonthlySalesReport = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { month } = req.params;
+    const data = await SalesService.getManagerMonthlySalesReport(String(month));
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitCustomerMonthlySalesReport = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await SalesService.submitCustomerMonthlySalesReport(req.body);
+    return res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateSalesOrder = async (
   req: Request,
   res: Response,

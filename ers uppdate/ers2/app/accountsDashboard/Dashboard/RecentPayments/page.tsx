@@ -9,6 +9,7 @@ import {
   ExternalLink, Printer, AlertCircle, Loader2 
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { printElementById } from "@/lib/printElement";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -145,7 +146,7 @@ export default function RecentPayments() {
         </motion.div>
         
         <div className="flex gap-3">
-            <button onClick={() => window.print()} className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-white/10 transition-all text-white">
+            <button onClick={() => printElementById("recent-payments-print-area", "Recent Payments")} className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-white/10 transition-all text-white">
                 <Printer size={14} /> Print
             </button>
             <button onClick={handleDownloadPDF} className="flex items-center gap-3 px-6 py-3 bg-blue-600 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all text-white shadow-lg shadow-blue-600/20">
@@ -174,7 +175,7 @@ export default function RecentPayments() {
       </div>
 
       {/* TABLE */}
-      <div className="bg-[#050b1d] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl print:border-none print:bg-white">
+      <div id="recent-payments-print-area" className="bg-[#050b1d] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl print:border-none print:bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>

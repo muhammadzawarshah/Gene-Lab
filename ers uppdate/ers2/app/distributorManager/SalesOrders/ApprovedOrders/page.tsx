@@ -8,6 +8,8 @@ import {
   Edit3, X, Search, Save, User, Eye, Info, Hash, Calendar, DollarSign, Tag, ArrowRightLeft, ShoppingBag, CheckCircle2
 } from 'lucide-react';
 import { InvoiceComponent } from '@/components/layout/InvoiceComponent';
+import { DataRibbon, EmptyState, PremiumHero, PremiumPage, SearchPanel, StatusPill } from '@/components/ui/premium';
+import { printElementById } from '@/lib/printElement';
 
 // --- TYPES ---
 interface OrderItem {
@@ -39,6 +41,7 @@ export default function ApprovedOrderManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [reportDiscountMode, setReportDiscountMode] = useState<'tp' | 'tp_dd' | 'all' | null>(null);
 
   const [editForm, setEditForm] = useState<{
     so_id: number;
@@ -57,6 +60,18 @@ export default function ApprovedOrderManagement() {
   const safeNum = (val: any): number => {
     const n = parseFloat(val);
     return isNaN(n) ? 0 : n;
+  };
+
+  const getOrderEvaluation = (order: Order): number => {
+    const orderTotal = safeNum(order.total_amount);
+    if (orderTotal > 0) return orderTotal;
+
+    return order.salesorderline.reduce((sum, item) => {
+      const lineTotal = safeNum(item.line_total);
+      if (lineTotal > 0) return sum + lineTotal;
+
+      return sum + (safeNum(item.quantity) * safeNum(item.unit_price));
+    }, 0);
   };
 
   // --- FETCH DATA ---
@@ -135,11 +150,27 @@ export default function ApprovedOrderManagement() {
   const tdStyle = "p-4 text-xs font-medium text-white border-b border-white/5";
 
   return (
-    <div className="text-white p-6 font-sans">
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage>
+      <Toaster position="top-right" theme="light" richColors />
 
-      {/* HEADER (Same UI/UX) */}
-      <div className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
+      <PremiumHero
+        eyebrow="Fulfillment Control"
+        icon={CheckCircle2}
+        title={<>Approved <span className="text-emerald-500">Orders</span></>}
+        description="Verified sales orders, product counts, status movement, and invoice preview tools in a clinical data workspace."
+        meta={<StatusPill tone="emerald">{filteredOrders.length} Approved</StatusPill>}
+      >
+        <DataRibbon
+          items={[
+            { label: "Orders", value: filteredOrders.length },
+            { label: "Products", value: filteredOrders.reduce((sum, order) => sum + order.salesorderline.length, 0) },
+            { label: "Qty", value: filteredOrders.reduce((sum, order) => sum + order.salesorderline.reduce((inner, item) => inner + safeNum(item.quantity), 0), 0).toLocaleString() },
+            { label: "Total", value: `PKR ${filteredOrders.reduce((sum, order) => sum + getOrderEvaluation(order), 0).toLocaleString()}` },
+          ]}
+        />
+      </PremiumHero>
+
+      {false && <div className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-14 w-1.5 bg-emerald-500 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
           <div>
@@ -180,27 +211,52 @@ export default function ApprovedOrderManagement() {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
+
+      <SearchPanel className="mt-6" value={searchQuery} onChange={setSearchQuery} placeholder="Search approved records...">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: 'All', value: 'ALL' },
+            { label: 'Approved', value: 'APPROVED' },
+            { label: 'Partial', value: 'PARTIAL' },
+            { label: 'Completed', value: 'COMPLETED' },
+          ].map(({ label, value }) => (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                statusFilter === value ? 'border-blue-500 bg-blue-500 text-white' : 'border-white/10 bg-white/55 text-slate-500 hover:border-blue-500/25'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </SearchPanel>
 
       {/* TABLE (Same Columns) */}
-      <div className="bg-slate-900/30 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-md shadow-2xl animate-in fade-in duration-500">
+      <div className="app-panel mt-6 overflow-hidden rounded-[1.45rem] border border-white/10 shadow-2xl animate-in fade-in duration-500">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-white/[0.02]">
                 <th className="p-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/10">Ref#</th>
                 <th className={thStyle}>Customer</th>
-                <th className={thStyle}>Product</th>
+                <th className={thStyle + " text-center"}>Products</th>
                 <th className={thStyle}>Status</th>
                 <th className={thStyle + " text-center"}>Qty</th>
-                <th className={thStyle + " text-right"}>Rate</th>
                 <th className={thStyle + " text-right"}>Total Amount</th>
                 <th className="p-4 text-center text-[10px] font-black text-slate-500 uppercase border-b border-white/10">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.flatMap((order) => order.salesorderline.map((item, idx) => (
-                <tr key={`${order.so_id}-${idx}`} className="hover:bg-emerald-500/[0.02] transition-colors group">
+              {filteredOrders.map((order) => {
+                const totalQty = order.salesorderline.reduce((sum, item) => sum + safeNum(item.quantity), 0);
+                const totalEvaluation = getOrderEvaluation(order);
+                const firstItem = order.salesorderline[0];
+
+                return (
+                <tr key={order.so_id} className="hover:bg-emerald-500/[0.02] transition-colors group">
                   <td className="p-4 text-center text-emerald-500/50 font-mono text-xs font-bold italic">#{order.so_id}</td>
                   <td className={tdStyle}>
                     <div className="flex items-center gap-2 text-slate-300 font-bold">
@@ -208,36 +264,33 @@ export default function ApprovedOrderManagement() {
                       {order.party?.name}
                     </div>
                   </td>
-                  <td className={tdStyle}>
-                    <div className="flex items-center gap-2 italic">
+                  <td className={tdStyle + " text-center"}>
+                    <div className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-[11px] font-black text-emerald-400">
                       <ShoppingBag size={12} className="text-slate-500" />
-                      {item.product?.name}
+                      {order.salesorderline.length} Products
                     </div>
                   </td>
                   <td className={tdStyle}>
-                    <span className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase border ${
-                      order.status === 'COMPLETED'
-                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                        : order.status === 'PARTIAL'
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                    }`}>
-                      <CheckCircle2 size={10} /> {order.status}
-                    </span>
+                    <StatusPill tone={order.status === 'COMPLETED' ? 'blue' : order.status === 'PARTIAL' ? 'amber' : 'emerald'}>
+                      {order.status}
+                    </StatusPill>
                   </td>
-                  <td className={tdStyle + " text-center font-bold"}>{item.quantity}</td>
-                  <td className={tdStyle + " text-right font-mono text-blue-400"}>{safeNum(item.unit_price).toLocaleString()}</td>
-                  <td className={tdStyle + " text-right font-black text-emerald-400 italic"}>PKR {safeNum(item.line_total).toLocaleString()}</td>
+                  <td className={tdStyle + " text-center font-bold"}>{totalQty.toLocaleString()}</td>
+                  <td className={tdStyle + " text-right font-black text-emerald-400 italic"}>PKR {totalEvaluation.toLocaleString()}</td>
                   <td className="p-4 text-center">
                     <div className="flex justify-center gap-3">
-                      <button onClick={() => openEditModal(order, item)} className="p-2.5 bg-white/5 hover:bg-emerald-600 text-slate-400 hover:text-white rounded-xl transition-all active:scale-90 border border-white/5"><Edit3 size={15} /></button>
-                      <button onClick={() => { setSelectedOrder(order); setIsViewOpen(true); }} className="p-2.5 bg-white/5 hover:bg-emerald-500 text-slate-400 hover:text-black rounded-xl transition-all active:scale-90 border border-white/5"><Eye size={15} /></button>
+                      <button onClick={() => firstItem && openEditModal(order, firstItem)} className="p-2.5 bg-white/5 hover:bg-emerald-600 text-slate-400 hover:text-white rounded-xl transition-all active:scale-90 border border-white/5"><Edit3 size={15} /></button>
+                      <button onClick={() => { setSelectedOrder(order); setReportDiscountMode(null); setIsViewOpen(true); }} className="p-2.5 bg-white/5 hover:bg-emerald-500 text-slate-400 hover:text-black rounded-xl transition-all active:scale-90 border border-white/5"><Eye size={15} /></button>
                     </div>
                   </td>
                 </tr>
-              )))}
+                );
+              })}
             </tbody>
           </table>
+          {filteredOrders.length === 0 && (
+            <EmptyState icon={CheckCircle2} title="No approved orders" description="No approved, partial, or completed orders match the current filters." />
+          )}
         </div>
       </div>
 
@@ -309,10 +362,11 @@ export default function ApprovedOrderManagement() {
 
             {/* Modal Toolbar (Sticky) */}
             <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
-              <h3 className="text-white font-black italic uppercase ml-4">Invoice Preview</h3>
+              <h3 className="text-white font-black italic uppercase ml-4">Select Report Discount</h3>
               <div className="flex gap-4">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => printElementById("printable-area", "Sales Order Report")}
+                  disabled={!reportDiscountMode}
                   className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
                 >
                   Print PDF
@@ -329,15 +383,33 @@ export default function ApprovedOrderManagement() {
             {/* Invoice Content Area */}
             <div className="p-6 bg-gray-100 rounded-b-[2rem]">
               <div id="printable-area">
-                {/* YAHAN HUM COMPONENT CALL KAR RAHE HAIN */}
-                <InvoiceComponent order={selectedOrder} />
+                {!reportDiscountMode ? (
+                  <div className="grid gap-4 p-8 md:grid-cols-3">
+                    {[
+                      { key: 'tp' as const, title: 'Report With TP', desc: 'Sirf TP discount apply hoga.' },
+                      { key: 'tp_dd' as const, title: 'Report With TP + DD', desc: 'TP aur DD discount apply honge.' },
+                      { key: 'all' as const, title: 'Report With TP + DD + Other', desc: 'Teeno discounts apply honge.' },
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setReportDiscountMode(option.key)}
+                        className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-400 hover:shadow-lg"
+                      >
+                        <p className="text-sm font-black uppercase text-slate-950">{option.title}</p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">{option.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <InvoiceComponent order={selectedOrder} discountMode={reportDiscountMode} />
+                )}
               </div>
             </div>
 
           </div>
         </div>
       )}
-    </div>
+    </PremiumPage>
   );
 }
 

@@ -50,7 +50,7 @@ static async shipOrder(
 ) {
   return await prisma.$transaction(async (tx) => {
 
-    // Pre-fetch latest purchase_price from GRN lines for all products in this SO
+    // Pre-fetch latest GRN prices for all products in this SO so delivery uses GRN pricing.
     const soProductLines = await tx.salesorderline.findMany({
       where: { so_id: Number(soId) },
       select: { product_id: true }
@@ -60,13 +60,30 @@ static async shipOrder(
     const latestGrnLines = await tx.grnline.findMany({
       where: {
         product_id: { in: soProductIds },
-        purchase_price: { not: null }
+        OR: [
+          { sale_price: { not: null } },
+          { purchase_price: { not: null } }
+        ]
       },
       orderBy: { grn_line_id: 'desc' },
-      select: { product_id: true, purchase_price: true }
+      select: { product_id: true, batch_id: true, sale_price: true, purchase_price: true }
     });
+    const salePriceMap = new Map<string, number>();
     const purchasePriceMap = new Map<string, number>();
+    const batchSalePriceMap = new Map<string, number>();
+    const batchPurchasePriceMap = new Map<string, number>();
     for (const gl of latestGrnLines) {
+      const batchKey = gl.batch_id ? `${gl.product_id}:${Number(gl.batch_id)}` : null;
+
+      if (batchKey && !batchSalePriceMap.has(batchKey) && gl.sale_price !== null) {
+        batchSalePriceMap.set(batchKey, Number(gl.sale_price));
+      }
+      if (batchKey && !batchPurchasePriceMap.has(batchKey) && gl.purchase_price !== null) {
+        batchPurchasePriceMap.set(batchKey, Number(gl.purchase_price));
+      }
+      if (gl.product_id && !salePriceMap.has(gl.product_id) && gl.sale_price !== null) {
+        salePriceMap.set(gl.product_id, Number(gl.sale_price));
+      }
       if (gl.product_id && !purchasePriceMap.has(gl.product_id) && gl.purchase_price !== null) {
         purchasePriceMap.set(gl.product_id, Number(gl.purchase_price));
       }
@@ -177,9 +194,35 @@ static async shipOrder(
         }
       });
 
-      if (!existingStock || Number(existingStock.quantity_on_hand || 0) < item.requestedQty) {
-        throw new Error(`Insufficient warehouse stock for Product ID: ${orderLine.product_id}`);
+      const warehouseAvailableQty = existingStock
+        ? Number(existingStock.quantity_on_hand || 0) - Number(existingStock.reserved_quantity || 0)
+        : 0;
+
+      if (!existingStock || warehouseAvailableQty < item.requestedQty) {
+        throw new Error(`Insufficient warehouse stock for Product ID: ${orderLine.product_id}. Available: ${warehouseAvailableQty}`);
       }
+
+      const selectedBatchItem = finalBatchId
+        ? await tx.batchitem.findFirst({
+            where: {
+              batch_id: Number(finalBatchId),
+              product_id: orderLine.product_id
+            }
+          })
+        : null;
+
+      if (finalBatchId && (!selectedBatchItem || Number(selectedBatchItem.available_quantity || 0) < item.requestedQty)) {
+        const batchAvailableQty = selectedBatchItem ? Number(selectedBatchItem.available_quantity || 0) : 0;
+        throw new Error(`Insufficient batch stock for Product ID: ${orderLine.product_id}. Available: ${batchAvailableQty}`);
+      }
+
+      const grnBatchKey = finalBatchId ? `${orderLine.product_id}:${Number(finalBatchId)}` : null;
+      const grnSalePrice = grnBatchKey && batchSalePriceMap.has(grnBatchKey)
+        ? batchSalePriceMap.get(grnBatchKey)
+        : salePriceMap.get(orderLine.product_id);
+      const grnPurchasePrice = grnBatchKey && batchPurchasePriceMap.has(grnBatchKey)
+        ? batchPurchasePriceMap.get(grnBatchKey)
+        : purchasePriceMap.get(orderLine.product_id);
 
       await tx.deliverynoteline.create({
         data: {
@@ -189,12 +232,12 @@ static async shipOrder(
           uom_id: orderLine.uom_id,
           batch_id: finalBatchId,
           so_line_id: orderLine.so_line_id,
-          sale_price: item.sale_price !== undefined && item.sale_price !== null
+          sale_price: grnSalePrice ?? (item.sale_price !== undefined && item.sale_price !== null
             ? Number(item.sale_price)
             : orderLine.sale_price
               ? Number(orderLine.sale_price)
-              : null,
-          purchase_price: purchasePriceMap.get(orderLine.product_id) ?? null,
+              : null),
+          purchase_price: grnPurchasePrice ?? null,
           remarks: "Shipped from warehouse"
         }
       });
@@ -210,6 +253,15 @@ static async shipOrder(
           quantity_on_hand: { decrement: item.requestedQty }
         }
       });
+
+      if (selectedBatchItem) {
+        await tx.batchitem.update({
+          where: { item_id: selectedBatchItem.item_id },
+          data: {
+            available_quantity: { decrement: item.requestedQty }
+          }
+        });
+      }
 
       await tx.stockmovement.create({
         data: {

@@ -163,7 +163,7 @@ export default function SecureWarehouseRegistry() {
 
   return (
     <div className="text-slate-300 p-4 md:p-10 min-h-screen bg-transparent select-none">
-      <Toaster position="top-right" richColors theme="dark" />
+      <Toaster position="top-right" richColors theme="light" />
 
       <div className="max-w-4xl mx-auto mb-10 flex justify-between items-end border-b border-white/5 pb-6">
         <div>
@@ -196,12 +196,12 @@ export default function SecureWarehouseRegistry() {
                 name="provinceId" 
                 value={formData.provinceId} 
                 onChange={handleInputChange} 
-                className={inputClass + " pl-12 cursor-pointer appearance-none border-blue-500/20 text-blue-100"}
+                className={inputClass + " pl-12 cursor-pointer appearance-none border-blue-500/40 bg-white text-slate-950"}
                 required
               >
-                <option value="">Select Region...</option>
+                <option value="" className="bg-white text-slate-950">Select Region...</option>
                 {provinces.map(p => (
-                  <option key={p.province_id} value={p.province_id}>
+                  <option key={p.province_id} value={p.province_id} className="bg-white text-slate-950">
                     {p.name}
                   </option>
                 ))}
@@ -237,21 +237,21 @@ export default function SecureWarehouseRegistry() {
                   <label className={labelClass}>District Verification * {districtsLoading && <Loader2 className="inline animate-spin ml-2" size={10} />}</label>
                   <div 
                     onClick={() => !districtsLoading && setIsDistrictOpen(!isDistrictOpen)}
-                    className={inputClass + " flex items-center justify-between cursor-pointer"}
+                    className={inputClass + " flex items-center justify-between cursor-pointer bg-white text-slate-950 border-blue-500/40"}
                   >
-                    <span className="flex items-center gap-3">
-                      <MapPin size={16} className="text-slate-600" />
+                    <span className="flex items-center gap-3 text-slate-950">
+                      <MapPin size={16} className="text-blue-600" />
                       {formData.districtName || "Search District..."}
                     </span>
-                    <ChevronRight className={isDistrictOpen ? 'rotate-90' : ''} size={16} />
+                    <ChevronRight className={`${isDistrictOpen ? 'rotate-90' : ''} text-slate-700`} size={16} />
                   </div>
 
                   {isDistrictOpen && (
-                    <div className="absolute z-50 w-full mt-2 bg-[#020617] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-                      <div className="p-2 bg-slate-900/50 flex items-center gap-2">
-                        <Search size={14} className="text-slate-500" />
+                    <div className="absolute z-50 w-full mt-2 bg-white border border-blue-100 rounded-xl shadow-2xl overflow-hidden">
+                      <div className="p-2 bg-slate-50 flex items-center gap-2">
+                        <Search size={14} className="text-blue-600" />
                         <input 
-                          className="bg-transparent w-full text-xs text-white outline-none" 
+                          className="bg-transparent w-full text-xs text-slate-950 outline-none placeholder:text-slate-500" 
                           placeholder="Filter Districts..." 
                           value={districtSearch}
                           onChange={(e) => setDistrictSearch(e.target.value)}
@@ -266,7 +266,7 @@ export default function SecureWarehouseRegistry() {
                               setFormData(prev => ({ ...prev, districtId: d.district_id, districtName: d.name }));
                               setIsDistrictOpen(false);
                             }}
-                            className="p-3 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-white/5"
+                            className="p-3 text-xs font-semibold text-slate-800 hover:bg-blue-50 cursor-pointer border-b border-slate-100"
                           >
                             {d.name}
                           </div>

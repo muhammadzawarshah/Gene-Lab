@@ -151,6 +151,7 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             type: 'dropdown',
             items: [
                 { label: 'Distributor List', href: '/distributorManager/Distributors/DistributorList' },
+                { label: 'Monthly Closing', href: '/distributorManager/Distributors/MonthlyClosing' },
                 // { label: 'Credit Status', href: '/distributorManager/Distributors/CreditStatus' },
             ]
         },
@@ -192,6 +193,13 @@ export const NAVIGATION_CONFIG: Record<string, MenuItem[]> = {
             icon: ClipboardList,
             label: 'My Orders',
             href: '/distributorDashboard/MyOrders',
+            type: 'link'
+        },
+        {
+            id: 'monthly_sales_report',
+            icon: FileSearch,
+            label: 'Monthly Sales Report',
+            href: '/distributorDashboard/MonthlySalesReport',
             type: 'link'
         },
         {

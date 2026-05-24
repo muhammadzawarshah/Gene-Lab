@@ -12,6 +12,7 @@ import { useAuth } from "@/app/context/authcontext";
 import * as XLSX from 'xlsx';
 
 import { DeliveryNoteReportComponent } from "@/components/layout/DeliveryNoteReportComponent";
+import { printElementById } from "@/lib/printElement";
 
 export default function CompletedDeliveries() {
   const { user } = useAuth();
@@ -99,10 +100,10 @@ export default function CompletedDeliveries() {
 
   return (
     <div className="text-slate-200 font-sans pb-20 selection:bg-emerald-500/30">
-      <Toaster position="top-right" richColors theme="dark" />
+      <Toaster position="top-right" richColors theme="light" />
       
       {/* --- HEADER --- */}
-      <div className="px-4 md:px-8 py-6 md:py-10 sticky top-0 backdrop-blur-md z-40 border-b border-slate-900 bg-black/20">
+      <div className="px-4 md:px-8 py-6 md:py-10top-0">
         <div className="max-w-[1900px] mx-auto flex flex-col xl:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4 md:gap-6 self-start md:self-auto">
               <div className="h-12 w-12 md:h-14 md:w-14 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)] rotate-3 shrink-0">
@@ -122,10 +123,10 @@ export default function CompletedDeliveries() {
               <input onChange={(e) => setSearchTerm(e.target.value)} placeholder="SEARCH ARCHIVE..." className="w-full bg-slate-900 border border-slate-800 rounded-xl py-4 pl-12 pr-4 text-[10px] font-black text-white outline-none focus:border-emerald-600 transition-all uppercase" />
             </div>
             <div className="flex gap-3 w-full sm:w-auto">
-                <button onClick={exportToExcel} className="flex-1 sm:flex-none flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-emerald-700 transition-all shadow-lg">
-                  <FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export Report</span>
+                <button onClick={exportToExcel} className="flex-1 sm:flex-none flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-emerald-700 transition-all shadow-sm [&_*]:text-white">
+                  <FileSpreadsheet size={16} /> <span>Export Report</span>
                 </button>
-                <button onClick={fetchCompleted} className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-slate-500 hover:text-emerald-500 transition-all cursor-pointer">
+                <button onClick={fetchCompleted} className="p-4 bg-white border border-[#d5e4f1] rounded-xl text-[#125a9d] hover:bg-blue-50 hover:text-blue-700 transition-all cursor-pointer shadow-sm">
                   <RefreshCw size={18} className={isInitialLoading ? "animate-spin" : ""} />
                 </button>
             </div>
@@ -145,7 +146,7 @@ export default function CompletedDeliveries() {
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 italic"><Calendar size={12}/> Date To</label>
             <input type="date" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} className="w-full bg-[#020617] border border-slate-800 rounded-xl py-3 px-4 text-xs font-bold text-white outline-none focus:border-emerald-600" />
           </div>
-          <button onClick={() => {setDateFrom(""); setDateTo(""); setSearchTerm("");}} className="bg-slate-800 text-slate-400 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer">Reset Archive View</button>
+          <button onClick={() => {setDateFrom(""); setDateTo(""); setSearchTerm("");}} className="bg-white border border-[#d5e4f1] text-[#125a9d] py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-50 hover:text-blue-700 transition-all cursor-pointer shadow-sm">Reset Archive View</button>
           
           <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl flex justify-between items-center">
             <div className="flex flex-col">
@@ -181,7 +182,7 @@ export default function CompletedDeliveries() {
                     <td className="px-8 py-7 text-white font-bold uppercase text-[11px] tracking-tight">{row.displayName}</td>
                     <td className="px-8 py-7 text-right text-white font-black italic text-lg font-mono">PKR {row.displayTotal.toLocaleString()}</td>
                     <td className="px-8 py-7 text-center">
-                      <button onClick={() => setSelectedDelivery(row)} className="p-3 bg-slate-800/50 rounded-xl text-slate-400 hover:text-emerald-500 transition-all cursor-pointer">
+                      <button onClick={() => setSelectedDelivery(row)} className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer shadow-sm">
                         <Eye size={18} />
                       </button>
                     </td>
@@ -203,7 +204,7 @@ export default function CompletedDeliveries() {
                 <h3 className="text-white font-black italic uppercase ml-4">Delivery Note Preview</h3>
                 <div className="flex gap-4">
                   <button 
-                    onClick={() => window.print()}
+                    onClick={() => printElementById("printable-area", "Delivery Note Report")}
                     className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
                   >
                     Print Report

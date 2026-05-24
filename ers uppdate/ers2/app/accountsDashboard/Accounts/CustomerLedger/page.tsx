@@ -28,6 +28,7 @@ import {
 import { LedgerStatementModal } from "@/components/layout/LedgerStatementModal";
 import { exportLedgerStatementPdf } from "@/lib/ledgerPdf";
 import { printElementById } from "@/lib/printElement";
+import { DataRibbon, EmptyState, PremiumHero, PremiumPage, SearchPanel, StatusPill } from "@/components/ui/premium";
 
 interface LedgerEntry {
   id: string;
@@ -105,7 +106,7 @@ export default function CustomerLedger() {
       const fetchDetails = async () => {
         try {
           const safeId = selectedCustomer.id.replace(/[^a-zA-Z0-9-]/g, "");
-          const res = await secureApi.get(`/api/v1/finance/parties/ledger/${safeId}`);
+          const res = await secureApi.get(`/api/v1/finance/parties/receivable-ledger/${safeId}`);
           setLedgerEntries((prev) => ({ ...prev, [selectedCustomer.id]: res.data }));
         } catch {
           toast.error("ACCESS DENIED", {
@@ -214,35 +215,29 @@ export default function CustomerLedger() {
   const selectedStatement = selectedCustomer ? buildStatementData(selectedCustomer) : null;
 
   return (
-    <div className="min-h-screen p-4 font-sans text-slate-300 md:p-10">
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage>
+      <Toaster position="top-right" theme="light" richColors />
 
-      <div className="mx-auto mb-12 flex max-w-7xl flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-5xl font-black uppercase tracking-tighter text-white italic">
-            Client <span className="text-blue-500">Ledger</span>
-          </h1>
-          <div className="mt-2 flex items-center gap-2">
-            <ShieldCheck size={12} className="text-blue-500/60" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-500 italic">
-              Validated Financial Stream | Session: {userId?.slice(0, 8)}
-            </p>
-          </div>
-        </motion.div>
+      <PremiumHero
+        eyebrow="Accounts Receivable"
+        icon={Wallet}
+        title={<>Client <span className="text-blue-500">Ledger</span></>}
+        description="A financial command view for customer receivables, statements, PDF export, print, and WhatsApp communication."
+        meta={<StatusPill tone="blue">Session: {userId?.slice(0, 8) || "Secure"}</StatusPill>}
+      >
+        <DataRibbon
+          items={[
+            { label: "Customers", value: customers.length },
+            { label: "Visible", value: filteredCustomers.length },
+            { label: "Selected", value: selectedCustomer?.name || "None" },
+            { label: "Balance", value: selectedCustomer ? formatCurrency(selectedCustomer.totalBalance) : "PKR 0.00" },
+          ]}
+        />
+      </PremiumHero>
 
-        <div className="relative w-full shadow-2xl md:w-96">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
-          <input
-            type="text"
-            placeholder="VALIDATE ACCOUNT HASH..."
-            className="w-full rounded-2xl border border-white/10 bg-[#050b1d] py-5 pl-16 pr-6 text-[10px] font-black uppercase tracking-widest text-white shadow-inner outline-none transition-all focus:border-blue-500"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </div>
-      </div>
+      <SearchPanel className="mx-auto mt-6 max-w-7xl" value={search} onChange={setSearch} placeholder="Search customer name or account id..." />
 
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-12">
+      <div className="mx-auto mt-6 grid max-w-7xl grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-4">
           <div className="mb-4 flex items-center justify-between px-2">
             <h2 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -251,17 +246,17 @@ export default function CustomerLedger() {
             {isLoading && <Loader2 size={14} className="animate-spin text-blue-500" />}
           </div>
 
-          <div className="custom-scrollbar h-[calc(100vh-300px)] space-y-4 overflow-y-auto pr-2">
+          <div className="custom-scrollbar h-[calc(100vh-360px)] min-h-[420px] space-y-3 overflow-y-auto pr-2">
             {filteredCustomers.map((customer) => (
               <motion.div
                 key={customer.id}
                 onClick={() => setSelectedCustomer(customer)}
                 whileHover={{ x: 5, backgroundColor: "rgba(255,255,255,0.03)" }}
                 className={cn(
-                  "group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-[2.5rem] border p-8 transition-all",
+                  "group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-[1.45rem] border p-5 transition-all",
                   selectedCustomer?.id === customer.id
-                    ? "border-blue-400 bg-blue-600 text-white shadow-2xl shadow-blue-600/30"
-                    : "border-white/5 bg-[#050b1d] hover:border-white/10"
+                    ? "border-blue-400 bg-blue-600 text-white shadow-2xl shadow-blue-600/25"
+                    : "app-panel hover:border-blue-500/20"
                 )}
               >
                 <div className="flex items-center gap-5">
@@ -307,9 +302,9 @@ export default function CustomerLedger() {
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
-                className="flex h-full flex-col overflow-hidden rounded-[4rem] border border-white/5 bg-[#050b1d] shadow-2xl"
+                className="app-panel flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-white/5 shadow-2xl"
               >
-                <div className="flex flex-col items-center justify-between gap-6 border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-10 md:flex-row">
+                <div className="flex flex-col items-center justify-between gap-6 border-b border-white/5 bg-white/[0.45] p-6 md:flex-row md:p-8">
                   <div className="flex items-center gap-8">
                     <div className="flex h-20 w-20 items-center justify-center rounded-[2rem] border border-blue-500/20 bg-blue-600/10 text-blue-500 shadow-inner">
                       <Wallet size={36} />
@@ -356,9 +351,9 @@ export default function CustomerLedger() {
                   </div>
                 </div>
 
-                <div className="custom-scrollbar max-h-[500px] flex-1 overflow-x-auto overflow-y-auto p-6">
+                <div className="custom-scrollbar max-h-[500px] flex-1 overflow-x-auto overflow-y-auto p-4 md:p-6">
                   <table className="w-full text-left">
-                    <thead className="sticky top-0 z-10 bg-[#050b1d]">
+                    <thead className="sticky top-0 z-10 bg-white">
                       <tr className="border-b border-white/5 text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">
                         <th className="w-12 px-4 py-6">S.No</th>
                         <th className="px-4 py-6">Invoice No</th>
@@ -419,7 +414,7 @@ export default function CustomerLedger() {
                   </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.01] p-10">
+                <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.45] p-6 md:p-8">
                   <div className="flex items-center gap-3">
                     <div className="h-2 w-2 animate-pulse rounded-full bg-blue-500" />
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">
@@ -433,21 +428,7 @@ export default function CustomerLedger() {
                 </div>
               </motion.div>
             ) : (
-              <div className="flex h-full min-h-[600px] flex-col items-center justify-center rounded-[4rem] border-2 border-dashed border-white/5 bg-white/[0.01] text-slate-700">
-                <div className="relative mb-8">
-                  <User size={80} className="opacity-10" />
-                  <AlertTriangle
-                    size={24}
-                    className="absolute bottom-0 right-0 text-amber-500/20"
-                  />
-                </div>
-                <h3 className="text-xl font-black uppercase tracking-tighter text-slate-600 italic">
-                  No Target Selected
-                </h3>
-                <p className="mt-3 text-[9px] font-bold uppercase tracking-[0.4em]">
-                  Select a client profile to initiate financial handshake
-                </p>
-              </div>
+              <EmptyState icon={User} title="No customer selected" description="Select a customer account to open ledger entries, statement preview, PDF export, and print tools." className="min-h-[600px]" />
             )}
           </AnimatePresence>
         </div>
@@ -498,7 +479,7 @@ export default function CustomerLedger() {
           </LedgerStatementModal>
         </>
       )}
-    </div>
+    </PremiumPage>
   );
 }
 

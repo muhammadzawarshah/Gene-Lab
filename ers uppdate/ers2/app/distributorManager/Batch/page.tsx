@@ -142,7 +142,7 @@ export default function BatchPage() {
 
     const thClass = "px-4 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 bg-[#0b1224] whitespace-nowrap";
     const tdClass = "px-4 py-4 text-sm text-slate-300 border-b border-white/[0.02]";
-    const inputClass = "w-full bg-[#161f35] border border-white/5 rounded-2xl py-3.5 px-5 outline-none focus:ring-2 ring-amber-500/30 transition-all text-white [color-scheme:dark] text-sm";
+    const inputClass = "w-full bg-[#161f35] border border-white/5 rounded-2xl py-3.5 px-5 outline-none focus:ring-2 ring-amber-500/30 transition-all text-white text-sm";
     const labelClass = "text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] ml-1 block mb-1.5";
 
     const statusColor: Record<string, string> = {
@@ -153,7 +153,7 @@ export default function BatchPage() {
 
     return (
         <div className="text-slate-300 p-6 md:p-10 font-sans">
-            <Toaster richColors theme="dark" position="top-right" />
+            <Toaster richColors theme="light" position="top-right" />
             <div className="max-w-[1900px] mx-auto">
 
                 {/* HEADER */}

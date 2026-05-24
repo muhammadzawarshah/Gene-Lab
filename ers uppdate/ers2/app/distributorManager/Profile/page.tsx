@@ -178,7 +178,7 @@ export default function ProfileSettings() {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 pb-20 p-4">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
 
       {/* Page Title */}
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>

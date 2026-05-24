@@ -105,7 +105,7 @@ export default function ChangePassword() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans flex items-center justify-center">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

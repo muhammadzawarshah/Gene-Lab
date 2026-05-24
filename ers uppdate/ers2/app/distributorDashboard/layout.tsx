@@ -3,15 +3,14 @@
 import React, { useEffect, useState } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Navbar from "@/components/layout/navbar";
-import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/authcontext";
 import { Toaster } from "sonner";
-import { Menu, ShieldCheck, Loader2 } from "lucide-react";
+import { Menu, Loader2 } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { user, token, isLoading } = useAuth();
+  const { token, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -39,70 +38,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!token) return null;
 
   return (
-    <div className="app-shell app-grid relative flex h-screen overflow-hidden">
-      <Toaster theme="dark" position="top-right" richColors />
+    <div className="clinical-command-frame relative flex h-screen overflow-hidden">
+      <Toaster theme="light" position="top-right" richColors />
 
       <div
-        className={`fixed inset-y-0 left-0 z-[60] h-screen p-3 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:p-4 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        className={`fixed inset-y-0 left-0 z-[60] h-screen p-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:p-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <Sidebar />
+        <Sidebar onNavigate={() => setIsSidebarOpen(false)} />
       </div>
 
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 z-[55] bg-slate-950/55 backdrop-blur-sm md:hidden"
-          />
-        )}
-      </AnimatePresence>
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-[55] bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="pointer-events-none absolute left-0 top-0 h-72 w-72 rounded-full bg-sky-500/10 blur-[120px]" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-full bg-blue-500/10 blur-[120px]" />
+        <div className="pointer-events-none absolute -right-24 top-20 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-10 left-1/3 h-72 w-72 rounded-full bg-violet-400/8 blur-3xl" />
 
-        <div className="relative z-[80] flex items-center gap-3 px-3 pt-3 md:px-6 md:pt-6">
+        <div className="clinical-topbar relative z-[80] flex items-center gap-3 px-3 py-2.5 md:px-4">
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="app-soft-badge flex h-14 w-14 items-center justify-center rounded-[1.5rem] text-slate-500 transition-all hover:border-blue-500/25 hover:text-white md:hidden"
+            className="app-soft-badge flex h-14 w-14 items-center justify-center rounded-[1.5rem] text-slate-700 transition-all hover:border-blue-500/30 hover:bg-blue-50 hover:text-blue-700 lg:hidden"
           >
             <Menu size={22} />
           </button>
 
-          <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1">
             <Navbar />
           </div>
 
-          <div className="app-soft-badge hidden items-center gap-2 rounded-full px-4 py-3 md:flex">
-            <ShieldCheck size={14} className="text-emerald-500" />
-            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-              Link Stable: {user?.role}
-            </span>
-          </div>
         </div>
 
-        <main className="custom-scrollbar relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 md:px-6 md:pb-6 md:pt-6">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="h-full">
-            {children}
-          </motion.div>
+        <main className="custom-scrollbar relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 md:px-6 md:pb-5 md:pt-5 xl:px-8 xl:pb-6">
+          <div className="h-full">
+            <div className="clinical-content-card min-h-full rounded-[1.4rem] p-3 md:p-4">
+              {children}
+            </div>
+          </div>
         </main>
-
-        <div className="relative z-10 px-3 pb-3 md:px-6 md:pb-6">
-          <div className="app-footer-surface flex h-12 items-center justify-between rounded-[1.5rem] px-4">
-            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
-              Neural Net Active
-            </span>
-            <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-600">
-              GeneLabs v2.0
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   );
 }
+

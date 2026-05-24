@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Cookies from "js-cookie";
+import geneLogo from "@/public/gene-logo.png";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -22,6 +24,13 @@ import {
   Wallet,
   Loader2,
 } from "lucide-react";
+import {
+  DataRibbon,
+  PharmaKitVisual,
+  PremiumAreaChart,
+  PremiumDonutChart,
+  SparklineCard,
+} from "@/components/ui/premium";
 
 type ActivityItem = {
   action: string;
@@ -44,34 +53,44 @@ type StatCardProps = {
   trend?: number;
   tone: string;
   subtitle: string;
+  sparkValues?: number[];
+  sparkColor?: string;
   onClick?: () => void;
 };
 
-const StatCard = ({ title, value, icon: Icon, trend, tone, subtitle, onClick }: StatCardProps) => (
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  tone,
+  subtitle,
+  sparkValues,
+  sparkColor,
+  onClick,
+}: StatCardProps) => (
   <div
     onClick={onClick}
-    className={`app-panel group relative overflow-hidden rounded-[2rem] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/20 ${
+    className={`app-panel group relative overflow-hidden rounded-[1.75rem] p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-500/30 ${
       onClick ? "cursor-pointer" : ""
     }`}
   >
-    <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-60" />
-    <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-blue-500/10 blur-3xl transition-all duration-300 group-hover:scale-110" />
-
     <div className="relative z-10 flex items-start justify-between gap-4">
-      <div>
+      <div className="min-w-0">
         <div
-          className={`mb-5 inline-flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-gradient-to-br text-white shadow-lg ${tone}`}
+          className={`mb-5 inline-flex h-12 w-12 items-center justify-center rounded-[1rem] bg-gradient-to-br text-white shadow-lg ${tone}`}
         >
-          <Icon size={24} />
+          <Icon size={22} />
         </div>
         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">{title}</p>
-        <h3 className="mt-3 text-3xl font-black tracking-tight text-white md:text-[2rem]">{value}</h3>
-        <p className="mt-2 text-sm text-slate-500">{subtitle}</p>
+        <h3 className="mt-3 truncate text-2xl font-black tracking-tight text-white md:text-3xl">{value}</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-500">{subtitle}</p>
+        {sparkValues && <SparklineCard values={sparkValues} color={sparkColor} />}
       </div>
 
       {trend !== undefined && (
         <div
-          className={`app-soft-badge inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] ${
+          className={`app-soft-badge shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] ${
             trend > 0 ? "text-emerald-500" : "text-rose-500"
           }`}
         >
@@ -187,79 +206,127 @@ export default function DistributorManagerDashboard() {
     },
   ];
 
+  const buildSpark = (base: number) => {
+    const safe = Math.max(Number(base || 0), 1);
+    return [0.42, 0.55, 0.48, 0.67, 0.58, 0.76, 0.63, 0.86].map((ratio) =>
+      Math.round(safe * ratio)
+    );
+  };
+
+  const overviewChartData = [
+    { label: "Revenue", value: stats.revenue, comparison: Math.round(stats.revenue * 0.72) },
+    { label: "Orders", value: stats.totalOrders, comparison: Math.max(0, stats.totalOrders - 1) },
+    { label: "Invoices", value: stats.pendingInvoices, comparison: Math.max(0, stats.pendingInvoices - 1) },
+    { label: "Alerts", value: stats.lowStock, comparison: Math.max(0, stats.lowStock - 1) },
+  ];
+
+  const operationsDonutData = [
+    { name: "Orders", value: stats.totalOrders, color: "#2563eb" },
+    { name: "Invoices", value: stats.pendingInvoices, color: "#f59e0b" },
+    { name: "Stock Alerts", value: stats.lowStock, color: "#ec4899" },
+    { name: "Activities", value: stats.recentActivity.length, color: "#10b981" },
+  ].filter((item) => item.value > 0);
+
   return (
     <div className="pb-20">
-      <section className="app-panel-strong relative overflow-hidden rounded-[2.75rem] p-8 md:p-10">
-        <div className="pointer-events-none absolute -left-12 top-0 h-40 w-40 rounded-full bg-sky-400/18 blur-3xl" />
-        <div className="pointer-events-none absolute right-0 top-6 h-44 w-44 rounded-full bg-blue-500/14 blur-3xl" />
+      <section className="dashboard-command-hero relative overflow-hidden p-5 md:p-7">
+        <div className="pointer-events-none absolute right-10 top-8 h-56 w-56 rounded-full bg-blue-400/10 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-4 left-1/3 h-44 w-44 rounded-full bg-emerald-400/10 blur-3xl" />
 
-        <div className="relative z-10 grid gap-8 lg:grid-cols-[1.6fr_0.95fr]">
+        <div className="relative z-10 grid items-center gap-6 xl:grid-cols-[minmax(0,1fr)_300px_340px]">
           <div>
-            <div className="app-soft-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.26em] text-blue-500">
-              <Sparkles size={12} />
-              Distribution Manager
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-14 w-32 items-center justify-center rounded-[0.85rem] border border-[#dbe7f1] bg-white px-4">
+                <Image src={geneLogo} alt="Gene Laboratories" className="h-auto w-full object-contain" priority />
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#dbe7f1] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+                <Sparkles size={12} />
+                Distribution Command
+              </div>
             </div>
 
-            <div className="mt-6 max-w-3xl">
-              <h1 className="flex flex-wrap items-center gap-3 text-4xl font-black tracking-tight text-white md:text-6xl">
-                <LayoutDashboard className="text-blue-500" size={42} />
-                Command Center
+            <div className="mt-5 max-w-3xl">
+              <p className="text-sm font-black text-blue-500">Welcome back,</p>
+              <h1 className="mt-2 flex flex-wrap items-center gap-3 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+                Warehouse Supervisor <span className="text-2xl">👋</span>
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-500 md:text-lg">
-                Real-time system overview — orders, invoices, stock aur revenue sab backend se live.
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
+                Here&apos;s what&apos;s happening with your distribution today.
               </p>
             </div>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <div className="app-soft-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+            <div className="mt-6 flex flex-wrap gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#dbe7f1] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">
                 <ShieldCheck size={12} className="text-emerald-500" />
                 Secure Node: {currentUserId || "LOCAL_HOST"}
               </div>
-              <div className="app-soft-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#dbe7f1] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">
                 <Calendar size={12} className="text-blue-500" />
                 {new Date().toLocaleDateString()}
               </div>
             </div>
           </div>
 
-          <div className="app-panel rounded-[2.2rem] p-6">
-            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-500">Operator Snapshot</p>
+          <div className="hidden items-center justify-center xl:flex">
+            <PharmaKitVisual className="scale-90" />
+          </div>
 
-            <div className="mt-6 flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-gradient-to-br from-blue-600 via-sky-500 to-cyan-400 text-2xl font-black text-white shadow-xl shadow-blue-500/20">
-                {currentUserId ? currentUserId.charAt(0).toUpperCase() : "A"}
-              </div>
+          <div className="relative overflow-hidden rounded-[1rem] border border-[#dbe7f1] bg-white p-5 md:p-6">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-500">Authorized Operator</p>
-                <p className="mt-2 text-2xl font-black tracking-tight text-white">Administrator</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-500">Live Snapshot</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Today&apos;s flow</h2>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-gradient-to-br from-[#125a9d] via-[#0099dc] to-[#bad048] text-lg font-black text-white shadow-lg shadow-blue-500/20">
+                {currentUserId ? currentUserId.charAt(0).toUpperCase() : "D"}
               </div>
             </div>
 
-            <div className="mt-8 grid gap-3">
+            <div className="mt-6 grid gap-3">
               <div className="app-soft-badge flex items-center justify-between rounded-[1.35rem] px-4 py-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Revenue Flow</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Gross Revenue</span>
                 <span className="text-sm font-black text-emerald-500">{formattedRevenue}</span>
               </div>
               <div className="app-soft-badge flex items-center justify-between rounded-[1.35rem] px-4 py-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Invoice Queue</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Pending Invoices</span>
                 <span className="text-sm font-black text-amber-500">{stats.pendingInvoices} open</span>
               </div>
               <div className="app-soft-badge flex items-center justify-between rounded-[1.35rem] px-4 py-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Stock Watch</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Inventory Watch</span>
                 <span className="text-sm font-black text-rose-500">{stats.lowStock} alerts</span>
               </div>
             </div>
+
+            <button
+              onClick={() => router.push("/distributorManager/SalesOrders/CreateSalesOrder")}
+              className="mt-5 flex w-full items-center justify-between rounded-[1rem] bg-gradient-to-r from-[#2563eb] to-[#7c3aed] px-4 py-4 text-left text-white shadow-lg shadow-blue-500/20 transition-all hover:brightness-110"
+            >
+              <span className="text-xs font-black uppercase tracking-[0.2em]">Create Sales Order</span>
+              <ChevronRight size={18} />
+            </button>
           </div>
         </div>
+
+        <DataRibbon
+          className="relative z-10 mt-7"
+          items={[
+            { label: "Revenue", value: formattedRevenue },
+            { label: "Orders", value: stats.totalOrders },
+            { label: "Invoices", value: `${stats.pendingInvoices} pending` },
+            { label: "Stock Alerts", value: stats.lowStock },
+          ]}
+        />
       </section>
 
-      <section className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Gross Revenue"
           value={formattedRevenue}
           icon={TrendingUp}
           tone="from-emerald-500 to-teal-500"
           subtitle="Total revenue from all sales orders."
+          sparkValues={buildSpark(stats.revenue)}
+          sparkColor="#10b981"
         />
         <StatCard
           title="Active Orders"
@@ -267,6 +334,8 @@ export default function DistributorManagerDashboard() {
           icon={ShoppingCart}
           tone="from-blue-600 to-cyan-500"
           subtitle="Draft + Approved + Partial orders."
+          sparkValues={buildSpark(stats.totalOrders)}
+          sparkColor="#2563eb"
         />
         <StatCard
           title="Pending Invoices"
@@ -274,6 +343,8 @@ export default function DistributorManagerDashboard() {
           icon={FileCheck}
           tone="from-amber-500 to-orange-500"
           subtitle="Invoices awaiting payment or posting."
+          sparkValues={buildSpark(stats.pendingInvoices)}
+          sparkColor="#f59e0b"
         />
         <StatCard
           title="Low Stock Items"
@@ -281,29 +352,61 @@ export default function DistributorManagerDashboard() {
           icon={AlertTriangle}
           tone="from-rose-500 to-pink-500"
           subtitle="Click to view critical products."
+          sparkValues={buildSpark(stats.lowStock)}
+          sparkColor="#ec4899"
           onClick={() => router.push("/distributorManager/Products/ProductList")}
         />
       </section>
 
-      <section className="mt-8 grid grid-cols-1 gap-8 xl:grid-cols-[1fr_1.4fr]">
-        <div className="space-y-6">
-          <div className="app-panel rounded-[2.3rem] p-6">
+      <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.95fr]">
+        <div className="app-panel rounded-[1.45rem] p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Analytics</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Operational Overview</h2>
+            </div>
+            <span className="w-fit rounded-full bg-blue-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-500">
+              Live Snapshot
+            </span>
+          </div>
+          <PremiumAreaChart data={overviewChartData} color="#6d5dfc" label="Current" />
+        </div>
+
+        <div className="app-panel rounded-[1.45rem] p-5 md:p-6">
+          <div className="mb-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Distribution Mix</p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Top Signals</h2>
+          </div>
+          <PremiumDonutChart
+            data={
+              operationsDonutData.length
+                ? operationsDonutData
+                : [{ name: "No activity", value: 1, color: "#cbd5e1" }]
+            }
+            centerLabel={(stats.totalOrders + stats.pendingInvoices + stats.lowStock).toLocaleString()}
+          />
+        </div>
+      </section>
+
+      <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.45fr]">
+        <div className="space-y-5">
+          <div className="app-panel rounded-[2rem] p-5 md:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-500">Quick Actions</p>
-                <h2 className="mt-2 text-2xl font-black tracking-tight text-white">Fast access modules</h2>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-white">Fast access</h2>
               </div>
               <div className="app-soft-badge rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">
                 Ready
               </div>
             </div>
 
-            <div className="mt-6 space-y-4">
+            <div className="mt-5 space-y-3">
               {quickActions.map((item) => (
                 <button
                   key={item.label}
                   onClick={() => router.push(item.href)}
-                  className="group app-soft-badge flex w-full items-center justify-between rounded-[1.6rem] px-4 py-4 text-left transition-all duration-300 hover:border-blue-500/25 hover:bg-blue-500/5"
+                  className="group app-soft-badge flex w-full items-center justify-between rounded-[1.35rem] px-4 py-3.5 text-left transition-all duration-300 hover:border-blue-500/25 hover:bg-blue-500/5"
                 >
                   <div className="flex items-center gap-4">
                     <div
@@ -312,7 +415,7 @@ export default function DistributorManagerDashboard() {
                       <item.icon size={22} />
                     </div>
                     <div>
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-white">{item.label}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-white">{item.label}</p>
                       <p className="mt-1 text-xs leading-5 text-slate-500">{item.sub}</p>
                     </div>
                   </div>
@@ -322,7 +425,7 @@ export default function DistributorManagerDashboard() {
             </div>
           </div>
 
-          <div className="app-panel rounded-[2.3rem] p-6">
+          <div className="app-panel rounded-[2rem] p-5 md:p-6">
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-[1.1rem] bg-gradient-to-br from-blue-600 to-cyan-500 text-white">
                 <Wallet size={22} />
@@ -341,7 +444,7 @@ export default function DistributorManagerDashboard() {
           </div>
         </div>
 
-        <div className="app-panel rounded-[2.5rem] p-6 md:p-8">
+        <div className="app-panel rounded-[2rem] p-5 md:p-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-500">Operational Logs</p>
@@ -365,7 +468,7 @@ export default function DistributorManagerDashboard() {
               stats.recentActivity.map((log, index) => (
                 <div
                   key={`${log.refId}-${index}`}
-                  className="app-soft-badge flex flex-col gap-4 rounded-[1.8rem] px-5 py-4 transition-all duration-300 hover:border-blue-500/20 md:flex-row md:items-center md:justify-between"
+                  className="app-soft-badge flex flex-col gap-4 rounded-[1.45rem] px-5 py-4 transition-all duration-300 hover:border-blue-500/20 md:flex-row md:items-center md:justify-between"
                 >
                   <div className="flex items-center gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-blue-500/10 text-sm font-black text-blue-500">
@@ -395,3 +498,4 @@ export default function DistributorManagerDashboard() {
     </div>
   );
 }
+

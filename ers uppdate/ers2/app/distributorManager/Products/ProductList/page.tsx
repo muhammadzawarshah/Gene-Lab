@@ -18,6 +18,7 @@ import {
   Layers3,
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
+import { DataRibbon, EmptyState, PremiumHero, PremiumPage, SearchPanel, StatusPill } from "@/components/ui/premium";
 
 const HSN_PREFIX_OPTIONS = ["R", "P", "A", "N", "C"];
 const CODE_DIGITS = 4;
@@ -216,42 +217,33 @@ export default function ProductListPage() {
     "w-full bg-[#161f35] border border-white/5 rounded-2xl py-4 px-5 outline-none text-white/70 cursor-not-allowed";
 
   return (
-    <div className="text-slate-300 p-6 md:p-10 font-sans">
-      <Toaster richColors theme="dark" position="top-right" />
+    <PremiumPage>
+      <Toaster richColors theme="light" position="top-right" />
 
-      <div className="max-w-[1900px] mx-auto">
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6 border-b border-white/5 pb-10">
-          <div className="flex items-center gap-6">
-            <div className="bg-emerald-600 p-4 rounded-2xl shadow-2xl shadow-emerald-900/20">
-              <Database className="text-white" size={30} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black text-white italic uppercase tracking-tighter">
-                SECURE <span className="text-emerald-500">INVENTORY</span>
-              </h1>
-              <p className="text-[10px] text-slate-600 font-bold tracking-[0.4em]">REAL_TIME_DATA_MANAGEMENT</p>
-            </div>
-          </div>
-        </header>
+      <div className="mx-auto max-w-[1900px]">
+        <PremiumHero
+          eyebrow="Inventory Intelligence"
+          icon={Database}
+          title={<>Secure <span className="text-emerald-500">Inventory</span></>}
+          description="A refined product master view for pharmaceutical SKU control, HSN tracking, categories, UOMs, and product modes."
+        >
+          <DataRibbon
+            items={[
+              { label: "Products", value: products.length },
+              { label: "Filtered", value: filteredProducts.length },
+              { label: "Categories", value: categories.length },
+              { label: "Modes", value: modes.length },
+            ]}
+          />
+        </PremiumHero>
 
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <SearchPanel className="mt-6" value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, description, category or mode...">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-            <input
-              type="text"
-              placeholder="Search by name, description, category or mode..."
-              className="bg-[#0f172a] border border-white/5 rounded-2xl py-4 pl-12 pr-6 w-full outline-none focus:ring-2 ring-emerald-500/20 text-sm transition-all"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-          </div>
-
-          <div className="relative md:w-[280px]">
             <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
             <input
               type="text"
               placeholder="Search by SKU..."
-              className="bg-[#0f172a] border border-white/5 rounded-2xl py-4 pl-12 pr-6 w-full outline-none focus:ring-2 ring-cyan-500/20 text-sm transition-all"
+              className="w-full rounded-[1.15rem] border border-white/10 bg-white/[0.62] py-4 pl-12 pr-6 text-sm outline-none transition-all focus:border-cyan-500/30 focus:ring-4 focus:ring-cyan-500/10 md:w-[240px]"
               value={skuSearch}
               onChange={(event) => setSkuSearch(event.target.value)}
             />
@@ -260,7 +252,7 @@ export default function ProductListPage() {
           <div className="relative md:w-[250px]">
             <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
             <select
-              className="bg-[#0f172a] border border-white/5 rounded-2xl py-4 pl-12 pr-6 w-full outline-none focus:ring-2 ring-amber-500/20 text-sm transition-all text-slate-300 appearance-none cursor-pointer"
+              className="w-full cursor-pointer appearance-none rounded-[1.15rem] border border-white/10 bg-white/[0.62] py-4 pl-12 pr-6 text-sm text-slate-300 outline-none transition-all focus:border-amber-500/30 focus:ring-4 focus:ring-amber-500/10 md:w-[220px]"
               value={selectedCategory}
               onChange={(event) => setSelectedCategory(event.target.value)}
             >
@@ -272,9 +264,9 @@ export default function ProductListPage() {
               ))}
             </select>
           </div>
-        </div>
+        </SearchPanel>
 
-        <div className="bg-[#0f172a]/40 border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
+        <div className="app-panel mt-6 overflow-hidden rounded-[1.75rem] border border-white/5 shadow-2xl">
           <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-emerald-600/20">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -308,7 +300,7 @@ export default function ProductListPage() {
                         {product.description || "---"}
                       </div>
                     </td>
-                    <td className={tdClass}>{product.productcategory?.category || "---"}</td>
+                    <td className={tdClass}><StatusPill tone="emerald">{product.productcategory?.category || "---"}</StatusPill></td>
                     <td className={tdClass}>{formatUomLabel(product.uom)}</td>
                     <td className={tdClass}>{product.productmode?.name || getModeName(product.mode_id)}</td>
                     <td className={tdClass}>{getHsnPrefix(product.hsn_code)}</td>
@@ -344,9 +336,7 @@ export default function ProductListPage() {
             </table>
 
             {filteredProducts.length === 0 && (
-              <div className="py-20 text-center text-slate-600 font-bold text-xs uppercase tracking-widest">
-                No products found matching your criteria.
-              </div>
+              <EmptyState icon={Database} title="No products found" description="No product records match the current search and category filters." />
             )}
           </div>
         </div>
@@ -425,7 +415,7 @@ export default function ProductListPage() {
                 <label className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] ml-1">Product Name</label>
                 <input
                   type="text"
-                  className="w-full bg-[#161f35] border border-white/5 rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-emerald-500/30 transition-all text-white [color-scheme:dark]"
+                  className="w-full bg-[#161f35] border border-white/5 rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-emerald-500/30 transition-all text-white"
                   value={currentProduct.name || ""}
                   onChange={(event) => handleEditChange("name", event.target.value)}
                 />
@@ -531,6 +521,6 @@ export default function ProductListPage() {
           </div>
         </div>
       )}
-    </div>
+    </PremiumPage>
   );
 }

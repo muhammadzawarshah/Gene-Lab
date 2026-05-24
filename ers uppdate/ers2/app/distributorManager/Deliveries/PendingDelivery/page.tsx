@@ -10,6 +10,7 @@ import {
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/app/context/authcontext";
 import { DeliveryNoteReportComponent } from "@/components/layout/DeliveryNoteReportComponent";
+import { printElementById } from "@/lib/printElement";
 
 export default function PendingDeliveries() {
   const { user } = useAuth();
@@ -122,7 +123,7 @@ export default function PendingDeliveries() {
 
   return (
     <div className="text-slate-200 pb-20 font-sans">
-      <Toaster position="top-right" richColors theme="dark" />
+      <Toaster position="top-right" richColors theme="light" />
 
       {/* Header & Table same rahengi... */}
       <header className="px-8 py-10 border-b border-slate-900 backdrop-blur-md z-40">
@@ -220,22 +221,12 @@ export default function PendingDeliveries() {
                   )}
                 </div>
                 <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-slate-800 group">
-                  <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Adjust Discount</span>
-                  {mode === 'edit' ? (
-                    <input type="number" className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl py-3 px-4 text-rose-500 font-black text-lg outline-none focus:border-rose-600 transition-all" value={selectedDelivery.discount} onChange={(e) => {
-                      const val = parseFloat(e.target.value || "0");
-                      setSelectedDelivery({ ...selectedDelivery, discount: val, netTotal: (selectedDelivery.displayTotal - val) + selectedDelivery.transportCharges });
-                    }} />
-                  ) : <div className="text-xl font-black text-white italic">PKR {selectedDelivery.discount.toLocaleString()}</div>}
+                  <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Discount</span>
+                  <div className="text-xl font-black text-white italic">PKR {selectedDelivery.discount.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-slate-800 group">
                   <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Transport Charges</span>
-                  {mode === 'edit' ? (
-                    <input type="number" className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl py-3 px-4 text-rose-500 font-black text-lg outline-none focus:border-rose-600 transition-all" value={selectedDelivery.transportCharges} onChange={(e) => {
-                      const val = parseFloat(e.target.value || "0");
-                      setSelectedDelivery({ ...selectedDelivery, transportCharges: val, netTotal: (selectedDelivery.displayTotal - selectedDelivery.discount) + val });
-                    }} />
-                  ) : <div className="text-xl font-black text-white italic">PKR {selectedDelivery.transportCharges.toLocaleString()}</div>}
+                  <div className="text-xl font-black text-white italic">PKR {selectedDelivery.transportCharges.toLocaleString()}</div>
                 </div>
                 <div className="bg-rose-600/10 p-6 rounded-[2rem] border border-rose-600/30 group">
                   <span className="text-[10px] font-black uppercase text-rose-500 block mb-2">Final Net Total</span>
@@ -249,7 +240,7 @@ export default function PendingDeliveries() {
                   <thead className="bg-slate-900/80 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800">
                     <tr>
                       <th className="px-6 py-6">Product</th>
-                      <th className="px-6 py-6 text-center">Batch Selection</th>
+                      <th className="px-6 py-6 text-center">Batch No</th>
                       <th className="px-6 py-6 text-center">MFG Date</th>
                       <th className="px-6 py-6 text-center">Expiry Date</th>
                       <th className="px-6 py-6 text-center">Qty</th>
@@ -261,37 +252,14 @@ export default function PendingDeliveries() {
                       <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
                         <td className="px-6 py-6 text-xs font-black text-slate-100 uppercase">{line.product?.name}</td>
                         <td className="px-6 py-6 text-center">
-                          {mode === 'edit' ? (
-                            <select
-                              className="bg-slate-950 border-2 border-slate-800 rounded-xl py-2 px-3 text-amber-500 font-bold text-xs outline-none focus:border-rose-600 w-full"
-                              value={line.batch_id || ""}
-                              onChange={(e) => {
-                                const bId = Number(e.target.value);
-                                const currentBatch = (batchOptions[line.product_id] || []).find(b => b.batch_id === bId);
-                                const updatedLines = [...selectedDelivery.deliverynoteline];
-                                updatedLines[idx] = { ...updatedLines[idx], batch_id: bId, batch: currentBatch, mfg_date: currentBatch?.manufacturing_date, expiry_date: currentBatch?.expiry_date };
-                                setSelectedDelivery({ ...selectedDelivery, deliverynoteline: updatedLines });
-                              }}
-                            >
-                              <option value="">Select Batch</option>
-                              {(batchOptions[line.product_id] || []).map((b: any) => (
-                                <option key={b.batch_id} value={b.batch_id}>{b.batch_number} (Avl: {b.available_quantity})</option>
-                              ))}
-                            </select>
-                          ) : <span className="font-mono text-amber-500 font-bold text-xs">{line.batch?.batch_number || '---'}</span>}
+                          <span className="font-mono text-amber-500 font-bold text-xs">{line.batch?.batch_number || '---'}</span>
                         </td>
                         <td className="px-6 py-6 text-center text-[11px] text-slate-400 uppercase font-bold">{formatDate(line.batch?.manufacturing_date || line.mfg_date)}</td>
                         <td className="px-6 py-6 text-center">
                           <span className="bg-rose-500/10 text-rose-500 px-3 py-1 rounded text-[10px] font-bold">{formatDate(line.batch?.expiry_date || line.expiry_date)}</span>
                         </td>
                         <td className="px-6 py-6 text-center">
-                          {mode === 'edit' ? (
-                            <input type="number" className="w-20 bg-slate-950 border-2 border-slate-800 rounded-xl py-2 text-center text-rose-500 font-black text-xs outline-none focus:border-rose-600" value={line.delivered_qty} onChange={(e) => {
-                              const updatedLines = [...selectedDelivery.deliverynoteline];
-                              updatedLines[idx].delivered_qty = e.target.value;
-                              setSelectedDelivery({ ...selectedDelivery, deliverynoteline: updatedLines });
-                            }} />
-                          ) : <span className="text-xs font-black text-white italic">{line.delivered_qty}</span>}
+                          <span className="text-xs font-black text-white italic">{line.delivered_qty}</span>
                         </td>
                         <td className="px-6 py-6 text-right font-black text-white italic text-sm">PKR {(parseFloat(line.delivered_qty || 0) * parseFloat(line.product?.productprice?.[0]?.unit_price || 0)).toLocaleString()}</td>
                       </tr>
@@ -306,7 +274,7 @@ export default function PendingDeliveries() {
                   <div className={`h-8 w-8 rounded-lg flex items-center justify-center transition-all ${isApproved ? 'bg-rose-600 scale-110 shadow-lg' : 'bg-slate-800'}`}>
                     {isApproved && <ShieldCheck size={20} className="text-white animate-in zoom-in" />}
                   </div>
-                  <span className="text-xs font-black text-white uppercase italic tracking-widest">Approve Status & Data</span>
+                  <span className="text-xs font-black text-white uppercase italic tracking-widest">Approve Status Update</span>
                 </div>
               )}
 
@@ -314,7 +282,7 @@ export default function PendingDeliveries() {
                 <button onClick={() => setSelectedDelivery(null)} className="flex-1 py-5 border-2 border-slate-800 rounded-2xl text-[10px] font-black uppercase text-slate-500 tracking-[0.3em] hover:text-red-500 transition-all active:scale-95 cursor-pointer">CANCEL</button>
                 {mode === 'edit' && (
                   <button onClick={handleFinalize} disabled={!!loadingId || !isApproved} className="flex-[2] py-5 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] shadow-xl hover:bg-rose-700 disabled:opacity-20 flex items-center justify-center gap-3 transition-all active:scale-95 cursor-pointer">
-                    {loadingId ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />} SYNC & FINALIZE
+                    {loadingId ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />} UPDATE STATUS
                   </button>
                 )}
               </div>
@@ -329,7 +297,7 @@ export default function PendingDeliveries() {
             <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
               <h3 className="text-white font-black italic uppercase ml-4">Delivery Note Report</h3>
               <div className="flex gap-4">
-                <button onClick={() => window.print()} className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all">Print PDF</button>
+                <button onClick={() => printElementById("printable-area", "Delivery Note Report")} className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all">Print PDF</button>
                 <button onClick={() => setReportDelivery(null)} className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"><X size={20} /></button>
               </div>
             </div>

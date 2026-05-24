@@ -10,6 +10,7 @@ import {
   MessageSquare, Loader2, Lock, AlertTriangle
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { printElementById } from "@/lib/printElement";
 
 interface LedgerEntry {
   id: string;
@@ -92,18 +93,7 @@ export default function PartyLedger() {
   }, [customers, suppliers, partyFilter, search]);
 
   const handlePrint = () => {
-    const el = document.getElementById('party-ledger-print-area');
-    if (!el) return;
-    const s = document.createElement('style');
-    s.innerHTML = `@media print{body>*:not(#__pr__){display:none!important}#__pr__{display:block!important}}`;
-    const d = document.createElement('div');
-    d.id = '__pr__';
-    d.innerHTML = el.outerHTML;
-    document.head.appendChild(s);
-    document.body.appendChild(d);
-    window.print();
-    document.head.removeChild(s);
-    document.body.removeChild(d);
+    printElementById("party-ledger-print-area", "Party Ledger");
   };
 
   const handleExport = (party: Party) => {
@@ -129,7 +119,7 @@ export default function PartyLedger() {
 
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 text-slate-300">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER */}
       <div className="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-l-8 border-emerald-600 pl-6">

@@ -113,7 +113,7 @@ export default function WarehouseCommandCenter() {
 
   return (
     <div className="text-slate-300 p-6 md:p-10 font-sans selection:bg-blue-600/30">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
 
       {/* HEADER */}
       <div className="max-w-7xl mx-auto flex justify-between items-center mb-10">
@@ -202,16 +202,16 @@ export default function WarehouseCommandCenter() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className={labelClass}>Province</label>
-                  <select className={inputClass} value={formData.provinceId} onChange={(e) => setFormData({...formData, provinceId: e.target.value, districtId: ''})}>
-                    <option value="">Select Province</option>
-                    {provinces.map((p: any) => <option key={p.province_id} value={p.province_id}>{p.name}</option>)}
+                  <select className={inputClass + " bg-white text-slate-950 border-blue-500/40"} value={formData.provinceId} onChange={(e) => setFormData({...formData, provinceId: e.target.value, districtId: ''})}>
+                    <option value="" className="bg-white text-slate-950">Select Province</option>
+                    {provinces.map((p: any) => <option key={p.province_id} value={p.province_id} className="bg-white text-slate-950">{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={labelClass}>District</label>
-                  <select className={inputClass} value={formData.districtId} onChange={(e) => setFormData({...formData, districtId: e.target.value})}>
-                    <option value="">Select District</option>
-                    {districts.map((d: any) => <option key={d.district_id} value={d.district_id}>{d.name}</option>)}
+                  <select className={inputClass + " bg-white text-slate-950 border-blue-500/40"} value={formData.districtId} onChange={(e) => setFormData({...formData, districtId: e.target.value})}>
+                    <option value="" className="bg-white text-slate-950">Select District</option>
+                    {districts.map((d: any) => <option key={d.district_id} value={d.district_id} className="bg-white text-slate-950">{d.name}</option>)}
                   </select>
                 </div>
               </div>

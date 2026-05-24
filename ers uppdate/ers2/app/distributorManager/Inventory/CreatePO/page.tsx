@@ -111,7 +111,7 @@ export default function CreatePOPage() {
 
   return (
     <div className="max-w-[1500px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       <div className="mb-10 border-l-8 border-blue-600 pl-6">
         <h1 className="text-6xl font-black text-white uppercase tracking-tighter italic leading-none">

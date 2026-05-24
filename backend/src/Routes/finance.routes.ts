@@ -1,6 +1,6 @@
 // src/routes/finance.routes.ts
 import { Router } from 'express';
-import { postInvoice, postPayment , grnInvoice , getAvailablePurchaseInvoiceGrns, getAvailableSaleInvoiceDns, getinvoice , getspecificinvoice , getpayments , getpurchaseinvoices, createpurchasepayment ,specificpurchaseinvoice , specificcustomerinvoice , getcustomerinvoices ,specificcustomerpayment, getLedger, getLedgerLines, getAccountBalances, getPaymentAllocations, getAccountsDashboard, getPartySummary, getPartyLedger } from '../controllers/paymentsandinvoicing/finance.controller.js';
+import { postInvoice, postPayment , grnInvoice , getAvailablePurchaseInvoiceGrns, getAvailableSaleInvoiceDns, getinvoice , getspecificinvoice , getpayments , getpurchaseinvoices, createpurchasepayment ,specificpurchaseinvoice , specificcustomerinvoice , getcustomerinvoices ,specificcustomerpayment, getLedger, getLedgerLines, getAccountBalances, getPaymentAllocations, getAccountsDashboard, getPartySummary, getPartyLedger, getCustomerReceivableLedger } from '../controllers/paymentsandinvoicing/finance.controller.js';
 import { TaxController } from '../controllers/tax/tax.controller.js';
 const router = Router();
 
@@ -32,6 +32,7 @@ router.get('/accounts-dashboard',  getAccountsDashboard);
 
 // Party Ledgers
 router.get('/parties/summary/:type',  getPartySummary);
+router.get('/parties/receivable-ledger/:partyId', getCustomerReceivableLedger);
 router.get('/parties/ledger/:partyId', getPartyLedger);
 
 export default router;

@@ -102,7 +102,7 @@ export default function ReportsPage() {
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 p-6 pb-16 min-h-screen">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">

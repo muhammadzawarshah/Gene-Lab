@@ -6,12 +6,13 @@ import Cookies from 'js-cookie';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
 import { 
-  Search, FileDown, MoreVertical, 
-  Calendar, Trash2, Eye, Loader2, 
-  ArrowUpRight, ShieldCheck, Lock, X
+  Search, FileDown,
+  Calendar, Eye, Loader2,
+  ShieldCheck, Lock, X
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { PurchaseInvoiceReportComponent } from '@/components/layout/PurchaseInvoiceReportComponent';
+import { printElementById } from '@/lib/printElement';
 
 // --- Types ---
 interface PurchaseInvoice {
@@ -31,12 +32,8 @@ export default function PurchaseInvoices() {
   const [invoices, setInvoices] = useState<PurchaseInvoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [isFetchingInvoice, setIsFetchingInvoice] = useState(false);
-  const [settleTarget, setSettleTarget] = useState<PurchaseInvoice | null>(null);
-  const [settleForm, setSettleForm] = useState({ amount: '', method: 'CASH', payment_date: '', narration: '' });
-  const [isSettling, setIsSettling] = useState(false);
 
   // --- Auth & API Config ---
   const API_KEY = process.env.NEXT_PUBLIC_API_URL;
@@ -121,13 +118,7 @@ export default function PurchaseInvoices() {
   };
 
   const handlePrint = () => {
-    const printContent = document.getElementById('invoice-print-area');
-    if (printContent) {
-      const originalContent = document.body.innerHTML;
-      document.body.innerHTML = printContent.outerHTML;
-      window.print();
-      window.location.reload();
-    }
+    printElementById("invoice-print-area", "Purchase Invoice");
   };
 
   // --- 2. FUNCTION: DOWNLOAD INVOICE (With Content Security) ---
@@ -160,54 +151,6 @@ export default function PurchaseInvoices() {
     toast.success("LEDGER EXPORTED", { description: "Encrypted CSV is ready." });
   };
 
-  // --- 3. FUNCTION: SETTLE BILL ---
-  const openSettle = (inv: PurchaseInvoice) => {
-    setSettleTarget(inv);
-    const bal = inv.balanceAmount ?? inv.totalAmount ?? 0;
-    setSettleForm({ amount: String(bal > 0 ? bal : (inv.totalAmount ?? 0)), method: 'CASH', payment_date: '', narration: '' });
-    setActiveMenu(null);
-  };
-
-  const handleSettleBill = async () => {
-    if (!settleTarget) return;
-    if (!settleForm.amount || Number(settleForm.amount) <= 0) {
-      toast.error("Enter a valid payment amount.");
-      return;
-    }
-    setIsSettling(true);
-    const toastId = toast.loading("Processing payment...");
-    try {
-      await api.post('/api/v1/finance/payments/purchase', {
-        invoiceId: settleTarget.numericId,
-        amount: Number(settleForm.amount),
-        method: settleForm.method,
-        payment_date: settleForm.payment_date || undefined,
-        narration: settleForm.narration || undefined,
-        userId: currentUserId
-      });
-      toast.success("Payment recorded successfully", { id: toastId });
-      setSettleTarget(null);
-      fetchInvoices();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Payment failed", { id: toastId });
-    } finally {
-      setIsSettling(false);
-    }
-  };
-
-  // --- 4. FUNCTION: DELETE (DELETE REQUEST) ---
-  const handleDelete = async (id: string) => {
-    const toastId = toast.loading("PURGING RECORD...");
-    try {
-      await api.delete(`/procurement/invoices/${id}`);
-      setInvoices(prev => prev.filter(i => i.id !== id));
-      toast.success("RECORD PURGED", { id: toastId });
-      setActiveMenu(null);
-    } catch (err) {
-      toast.error("DELETE DENIED", { id: toastId, description: "Administrative lock active." });
-    }
-  };
-
   // --- SECURITY: INPUT SANITIZATION ---
   const safeSearch = useMemo(() => {
     return search.replace(/[<>'"\/\\;]/g, ""); // Prevent XSS & Injection payloads
@@ -222,8 +165,8 @@ export default function PurchaseInvoices() {
   const totalSpent = filteredInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   return (
-    <div className=" p-4 md:p-10 text-slate-300 font-sans" onClick={() => setActiveMenu(null)}>
-      <Toaster position="top-right" theme="dark" richColors />
+    <div className=" p-4 md:p-10 text-slate-300 font-sans">
+      <Toaster position="top-right" theme="light" richColors />
       
       {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
@@ -316,38 +259,13 @@ export default function PurchaseInvoices() {
                         </p>
                       </td>
                       <td className="px-8 py-6 text-right relative">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === inv.id ? null : inv.id); }}
-                          className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-slate-500 hover:text-white border border-white/5"
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleViewInvoice(inv); }}
+                          className="inline-flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-blue-400 transition-all hover:bg-blue-500 hover:text-white"
+                          title="View Purchase Invoice"
                         >
-                          <MoreVertical size={16} />
+                          <Eye size={16} /> Inspect
                         </button>
-
-                        {/* ACTION MENU */}
-                        <AnimatePresence>
-                          {activeMenu === inv.id && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.95, x: 20 }}
-                              animate={{ opacity: 1, scale: 1, x: 0 }}
-                              exit={{ opacity: 0, scale: 0.95, x: 20 }}
-                              className="absolute right-24 top-4 z-[100] w-52 bg-[#0f172a] border border-white/10 rounded-[1.8rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-3 text-left backdrop-blur-xl"
-                            >
-                              <button onClick={() => handleViewInvoice(inv)} className="w-full flex items-center gap-4 px-4 py-4 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-400 hover:text-white transition-all tracking-widest">
-                                <Eye size={16} className="text-blue-500" /> Inspect
-                              </button>
-                              <button onClick={() => openSettle(inv)} className="w-full flex items-center gap-4 px-4 py-4 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-400 hover:text-white transition-all tracking-widest">
-                                <ArrowUpRight size={16} className="text-emerald-500" /> Settle Bill
-                              </button>
-                              <div className="h-[1px] bg-white/5 my-2 mx-2" />
-                              <button 
-                                onClick={() => handleDelete(inv.id)}
-                                className="w-full flex items-center gap-4 px-4 py-4 hover:bg-rose-500/10 rounded-2xl text-[9px] font-black uppercase text-rose-500 transition-all tracking-widest"
-                              >
-                                <Trash2 size={16} /> Purge Record
-                              </button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </td>
                     </motion.tr>
                   ))}
@@ -357,121 +275,6 @@ export default function PurchaseInvoices() {
           </div>
         )}
       </div>
-
-      {/* SETTLE BILL MODAL */}
-      <AnimatePresence>
-        {settleTarget && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => !isSettling && setSettleTarget(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#0f172a] border border-white/10 rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden"
-            >
-              {/* Modal Header */}
-              <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-emerald-500/5">
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Settle Supplier Bill</p>
-                  <h2 className="text-lg font-black text-white italic uppercase tracking-tighter">{settleTarget.id}</h2>
-                  <p className="text-[10px] text-slate-400 mt-1 uppercase">{settleTarget.vendor}</p>
-                </div>
-                <button onClick={() => setSettleTarget(null)} className="p-2 text-slate-500 hover:text-white transition-colors">
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Balance Info */}
-              <div className="px-8 py-4 flex gap-6 border-b border-white/5">
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Total Bill</p>
-                  <p className="text-base font-black text-white">PKR {(settleTarget.totalAmount ?? 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Paid</p>
-                  <p className="text-base font-black text-emerald-400">PKR {(settleTarget.paidAmount ?? 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Balance Due</p>
-                  <p className="text-base font-black text-amber-400">PKR {(settleTarget.balanceAmount ?? settleTarget.totalAmount ?? 0).toLocaleString()}</p>
-                </div>
-              </div>
-
-              {/* Form */}
-              <div className="px-8 py-6 space-y-4">
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Payment Amount (PKR)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-[#020617] border border-white/10 rounded-xl py-3 px-4 text-sm font-bold text-white outline-none focus:border-emerald-500 transition-all"
-                    value={settleForm.amount}
-                    onChange={(e) => setSettleForm(f => ({ ...f, amount: e.target.value }))}
-                    placeholder="Enter amount"
-                    min={0}
-                  />
-                </div>
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Payment Method</label>
-                  <select
-                    className="w-full bg-[#020617] border border-white/10 rounded-xl py-3 px-4 text-sm font-bold text-white outline-none focus:border-emerald-500 transition-all [color-scheme:dark]"
-                    value={settleForm.method}
-                    onChange={(e) => setSettleForm(f => ({ ...f, method: e.target.value }))}
-                  >
-                    <option value="CASH">Cash</option>
-                    <option value="BANK">Bank Transfer</option>
-                    <option value="CHEQUE">Cheque</option>
-                    <option value="ONLINE">Online</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Payment Date (Optional)</label>
-                  <input
-                    type="date"
-                    className="w-full bg-[#020617] border border-white/10 rounded-xl py-3 px-4 text-sm font-bold text-white outline-none focus:border-emerald-500 transition-all [color-scheme:dark]"
-                    value={settleForm.payment_date}
-                    onChange={(e) => setSettleForm(f => ({ ...f, payment_date: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Narration (Optional)</label>
-                  <input
-                    type="text"
-                    className="w-full bg-[#020617] border border-white/10 rounded-xl py-3 px-4 text-sm font-bold text-white outline-none focus:border-emerald-500 transition-all"
-                    value={settleForm.narration}
-                    onChange={(e) => setSettleForm(f => ({ ...f, narration: e.target.value }))}
-                    placeholder="Payment remarks..."
-                  />
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-8 pb-8 flex gap-3">
-                <button
-                  onClick={() => setSettleTarget(null)}
-                  disabled={isSettling}
-                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSettleBill}
-                  disabled={isSettling}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl text-[10px] font-black text-white uppercase transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isSettling ? <Loader2 size={14} className="animate-spin" /> : <ArrowUpRight size={14} />}
-                  {isSettling ? 'Processing...' : 'Confirm Payment'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* PURCHASE BILL DETAIL MODAL */}
       {(isFetchingInvoice || selectedInvoice) && (
@@ -524,7 +327,7 @@ export default function PurchaseInvoices() {
                 onClick={() => setSelectedInvoice(null)}
                 className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all"
               >
-                Close Audit
+                Close
               </button>
             </div>
           </div>

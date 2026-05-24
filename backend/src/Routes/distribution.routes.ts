@@ -9,6 +9,7 @@ import { getDashboardStats } from '../controllers/sales/sales.controller.js';
 import { getManagerDashboard } from '../controllers/sales/sales.controller.js';
 import { getFinancialLedger } from '../controllers/sales/sales.controller.js';
 import { getBillingSyncStatus } from '../controllers/sales/sales.controller.js';
+import { getCustomerMonthlySalesReport, getManagerMonthlySalesReport, submitCustomerMonthlySalesReport } from '../controllers/sales/sales.controller.js';
 import { updateSalesOrder } from '../controllers/sales/sales.controller.js';
 import { specificsales } from '../controllers/sales/sales.controller.js';
 import { updateDelivery } from '../controllers/deliverycontroller/delivery.controller.js';
@@ -28,6 +29,9 @@ router.get('/manager-dashboard', getManagerDashboard);
 router.get('/dashboard-stats/:id', getDashboardStats);
 router.get('/financial-ledger/:id', getFinancialLedger);
 router.get('/billing-sync/:id', getBillingSyncStatus);
+router.get('/manager-monthly-sales/:month', getManagerMonthlySalesReport);
+router.get('/customer-monthly-sales/:userId/:month', getCustomerMonthlySalesReport);
+router.post('/customer-monthly-sales', submitCustomerMonthlySalesReport);
 router.put('/sales/:id', updateSalesOrder);
 router.get('/sales/:id',specificsales);
 

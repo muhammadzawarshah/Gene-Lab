@@ -204,6 +204,7 @@ model party {
   addresses       addresses[]
   customerinvoice customerinvoice[]
   journalline     journalline[]
+  monthlysalesreport monthlysalesreport[]
   user            user?             @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_party_user")
   tax             tax?              @relation(fields: [tax_id], references: [tax_id], onDelete: NoAction, onUpdate: NoAction)
   payment         payment[]
@@ -254,6 +255,7 @@ model product {
   batchitem           batchitem[]
   customerinvoiceline customerinvoiceline[]
   deliverynoteline    deliverynoteline[]
+  monthlysalesreport  monthlysalesreport[]
   grnline             grnline[]
   productcategory     productcategory?      @relation(fields: [product_cat_id], references: [product_category_id], onDelete: NoAction, onUpdate: NoAction)
   uom                 uom                   @relation(fields: [uom_id], references: [uom_id], onDelete: NoAction, onUpdate: NoAction)
@@ -459,6 +461,21 @@ model tax {
   salesorderline      salesorderline[]
   supplierinvoiceline supplierinvoiceline[]
   glaccount           glaccount?            @relation(fields: [gl_account_id], references: [gl_account_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model monthlysalesreport {
+  report_id    Int      @id @default(autoincrement())
+  party_id     String   @db.Uuid
+  product_id   String   @db.Uuid
+  report_month String   @db.VarChar(7)
+  sold_qty     Decimal  @default(0) @db.Decimal(15, 4)
+  remarks      String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @updatedAt @db.Timestamptz(6)
+  party        party    @relation(fields: [party_id], references: [party_id], onDelete: Cascade, onUpdate: NoAction)
+  product      product  @relation(fields: [product_id], references: [product_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([party_id, product_id, report_month])
 }
 
 model uom {

@@ -102,7 +102,7 @@ export default function BankCashLedger() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
       
       {/* HEADER SECTION */}
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">

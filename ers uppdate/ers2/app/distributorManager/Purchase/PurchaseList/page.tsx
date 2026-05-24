@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { PurchaseOrderReportComponent } from "@/components/layout/PurchaseOrderReportComponent";
+import { printElementById } from "@/lib/printElement";
 
 type PurchaseOrderSummary = {
   id: number;
@@ -163,7 +164,7 @@ export default function PurchaseOrderConsole() {
 
   return (
     <div className="text-slate-300 p-6 md:p-8 selection:bg-blue-500/30 font-sans">
-      <Toaster richColors theme="dark" position="top-right" />
+      <Toaster richColors theme="light" position="top-right" />
 
       <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center mb-10 gap-4 border-b border-white/5 pb-8">
         <div className="flex items-center gap-5">
@@ -331,7 +332,7 @@ export default function PurchaseOrderConsole() {
               <h3 className="text-white font-black italic uppercase ml-4">Purchase Order Preview</h3>
               <div className="flex gap-4">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => printElementById("printable-area", "Purchase Order")}
                   disabled={viewLoading || !viewDetail}
                   className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all disabled:opacity-50"
                 >

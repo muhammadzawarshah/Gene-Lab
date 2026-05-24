@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Navbar from "@/components/layout/navbar";
-import { motion, AnimatePresence } from "framer-motion";
 import { Toaster } from "sonner";
-import { Menu, Activity, Bell, CheckCheck, AlertTriangle } from "lucide-react";
+import { Menu, Bell, CheckCheck, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/authcontext";
 import axios from "axios";
@@ -22,6 +21,8 @@ export default function DashboardLayout({
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
+  const notificationDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && !token) {
@@ -53,6 +54,33 @@ export default function DashboardLayout({
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [token]);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+
+    const handleOutsideClose = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        notificationButtonRef.current?.contains(target) ||
+        notificationDropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowNotifications(false);
+    };
+
+    const handleEscapeClose = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowNotifications(false);
+    };
+
+    document.addEventListener("mousedown", handleOutsideClose);
+    document.addEventListener("keydown", handleEscapeClose);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClose);
+      document.removeEventListener("keydown", handleEscapeClose);
+    };
+  }, [showNotifications]);
 
   const handleMarkRead = async (id: number) => {
     try {
@@ -103,42 +131,37 @@ export default function DashboardLayout({
   if (!token) return null;
 
   return (
-    <div className="app-shell app-grid relative flex h-screen overflow-hidden">
-      <Toaster theme="dark" position="top-right" richColors />
+    <div className="clinical-command-frame relative flex h-screen overflow-hidden">
+      <Toaster theme="light" position="top-right" richColors />
 
       <div
-        className={`fixed inset-y-0 left-0 z-[60] h-screen p-3 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:p-4 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        className={`fixed inset-y-0 left-0 z-[60] h-screen p-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:p-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <Sidebar />
+        <Sidebar onNavigate={() => setIsSidebarOpen(false)} />
       </div>
 
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 z-[55] bg-slate-950/55 backdrop-blur-sm md:hidden"
-          />
-        )}
-      </AnimatePresence>
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-[55] bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="pointer-events-none absolute left-0 top-0 h-72 w-72 rounded-full bg-blue-500/10 blur-[120px]" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-[120px]" />
+        <div className="pointer-events-none absolute -right-24 top-20 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-10 left-1/3 h-72 w-72 rounded-full bg-violet-400/8 blur-3xl" />
 
-        <div className="relative z-50 flex items-center gap-3 px-3 pt-3 md:px-6 md:pt-6">
+        <div className="clinical-topbar relative z-50 flex items-center gap-3 px-3 py-2.5 md:px-4">
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="app-soft-badge flex h-14 w-14 items-center justify-center rounded-[1.5rem] text-slate-500 transition-all hover:border-blue-500/25 hover:text-white md:hidden"
+            className="app-soft-badge flex h-14 w-14 items-center justify-center rounded-[1.5rem] text-slate-700 transition-all hover:border-blue-500/30 hover:bg-blue-50 hover:text-blue-700 lg:hidden"
           >
             <Menu size={22} />
           </button>
 
-          <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1">
             <Navbar />
           </div>
 
@@ -146,8 +169,9 @@ export default function DashboardLayout({
             {/* Notification Bell */}
             <div className="relative">
               <button
+                ref={notificationButtonRef}
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative flex h-12 w-12 items-center justify-center rounded-[1.2rem] bg-[#0b1224] border border-white/10 text-slate-400 hover:text-white transition-all hover:bg-white/5 active:scale-95"
+                className="app-soft-badge relative flex h-12 w-12 items-center justify-center rounded-[1.2rem] text-slate-500 transition-all hover:border-blue-500/25 hover:text-blue-500 active:scale-95"
               >
                 <Bell size={20} />
                 {unreadCount > 0 && (
@@ -158,21 +182,24 @@ export default function DashboardLayout({
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 top-14 z-[999] w-80 md:w-96 rounded-[1.5rem] bg-[#0f172a] border border-white/10 shadow-2xl overflow-hidden">
-                  <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#0b1224]">
-                    <h3 className="text-sm font-black text-white uppercase tracking-widest">Notifications</h3>
+                <div
+                  ref={notificationDropdownRef}
+                  className="absolute right-0 top-full z-[9999] mt-3 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-[1rem] border border-[#dbe7f1] bg-white p-2 shadow-[0_12px_28px_rgba(15,42,70,0.12)]"
+                >
+                  <div className="flex items-center justify-between rounded-[0.85rem] border border-[#dbe7f1] bg-[#f8fbfe] p-4">
+                    <h3 className="text-sm font-black uppercase tracking-tight text-[#0f2742]">Notifications</h3>
                     {unreadCount > 0 && (
                       <button
                         onClick={handleMarkAllRead}
-                        className="text-[10px] font-bold text-blue-500 hover:text-blue-400 uppercase tracking-widest flex items-center gap-1 transition-all"
+                        className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-blue-600 transition-all hover:text-blue-700"
                       >
                         <CheckCheck size={12} /> Mark all read
                       </button>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto p-2">
+                  <div className="custom-scrollbar max-h-[min(22rem,calc(100vh-8rem))] overflow-y-auto p-2">
                     {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-xs text-slate-500 font-bold uppercase tracking-widest">
+                      <div className="p-6 text-center text-xs font-bold uppercase tracking-widest text-slate-600">
                         No notifications
                       </div>
                     ) : (
@@ -181,10 +208,10 @@ export default function DashboardLayout({
                           <div
                             key={notif.id}
                             onClick={() => !notif.is_read && handleMarkRead(notif.id)}
-                            className={`p-3 rounded-xl transition-all cursor-pointer border border-transparent ${
+                            className={`cursor-pointer rounded-[0.85rem] border p-3 transition-all ${
                               notif.is_read
-                                ? "opacity-60 hover:bg-white/[0.02]"
-                                : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20"
+                                ? "border-[#dbe7f1] bg-white opacity-75 hover:bg-blue-50"
+                                : "border-blue-200 bg-blue-50 hover:bg-blue-100"
                             }`}
                           >
                             <div className="flex gap-3">
@@ -192,7 +219,7 @@ export default function DashboardLayout({
                                 <AlertTriangle size={16} className={notif.is_read ? "text-slate-500" : "text-rose-500"} />
                               </div>
                               <div>
-                                <p className={`text-xs ${notif.is_read ? "text-slate-400" : "text-white font-bold"}`}>
+                                <p className={`text-xs ${notif.is_read ? "text-slate-600" : "font-bold text-[#0f2742]"}`}>
                                   {notif.message}
                                 </p>
                                 <p className="mt-1 text-[9px] font-bold text-slate-600 uppercase tracking-widest">
@@ -209,40 +236,16 @@ export default function DashboardLayout({
               )}
             </div>
 
-            <div className="app-soft-badge hidden items-center gap-2 rounded-full px-4 py-3 md:flex">
-              <Activity size={14} className="text-blue-500" />
-              <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-                System Ready
-              </span>
-            </div>
           </div>
         </div>
 
-        <main className="custom-scrollbar relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 md:px-6 md:pb-6 md:pt-6">
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="h-full"
-          >
+        <main className="custom-scrollbar relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 md:px-6 md:pb-5 md:pt-5 xl:px-8 xl:pb-6">
+          <div className="clinical-content-card min-h-full rounded-[1.4rem] p-3 md:p-4">
             {children}
-          </motion.div>
-        </main>
-
-        <div className="relative z-10 px-3 pb-3 md:px-6 md:pb-6">
-          <div className="app-footer-surface flex h-12 items-center justify-between rounded-[1.5rem] px-4">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                Direct Node Connection
-              </span>
-            </div>
-            <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-600">
-              VirtueOS Stable v4.2
-            </span>
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
 }
+

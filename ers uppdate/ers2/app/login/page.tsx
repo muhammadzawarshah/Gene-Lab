@@ -11,6 +11,7 @@ import {
 import { useAuth } from '@/app/context/authcontext'; 
 import axios from 'axios';
 import { toast, Toaster } from 'sonner';
+import { PharmaOrb } from '@/components/ui/premium';
 
 export default function LoginScreen() {
   // --- STATES ---
@@ -86,25 +87,51 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#01030a] flex items-center justify-center p-4 relative overflow-hidden">
-      <Toaster theme="dark" position="top-center" richColors />
-      
-      {/* BACKGROUND NEURAL ORBS (Aesthetic Untouched) */}
-      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/10 blur-[120px] rounded-full animate-pulse" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-cyan-500/10 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+    <div className="app-shell app-grid relative flex min-h-screen w-full items-center justify-center overflow-hidden p-4">
+      <Toaster theme="light" position="top-center" richColors />
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="w-full max-w-[450px] z-10"
+        className="relative z-10 grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/60 shadow-[0_40px_100px_rgba(8,35,63,0.16)] backdrop-blur-2xl lg:grid-cols-[1.15fr_0.85fr]"
       >
+        <div className="relative hidden min-h-[680px] overflow-hidden border-r border-white/10 p-10 lg:block">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(6,182,212,0.18),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.86),rgba(239,248,255,0.72))]" />
+          <div className="relative z-10 flex h-full flex-col justify-between">
+            <div>
+              <div className="flex h-20 w-48 items-center rounded-2xl bg-white/70 px-4 shadow-inner">
+                <Image src={geneLogo} alt="Gene Laboratories logo" priority className="h-auto w-full object-contain" />
+              </div>
+              <div className="mt-12 max-w-xl">
+                <h1 className="text-5xl font-black leading-tight tracking-tight text-white xl:text-6xl">
+                  Secure medical distribution, redesigned for speed.
+                </h1>
+                <p className="mt-5 max-w-lg text-base leading-8 text-slate-500">
+                  A premium operational workspace for finance, inventory, invoices, orders, and regulated distribution workflows.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {["Secure Auth", "Live Stock", "Finance Sync"].map((item) => (
+                <div key={item} className="rounded-2xl border border-white/10 bg-white/55 p-4 backdrop-blur">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">{item}</p>
+                  <div className="mt-3 h-1.5 rounded-full bg-gradient-to-r from-[#2563eb] via-[#06b6d4] to-[#10b981]" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <PharmaOrb className="absolute bottom-20 right-4 opacity-95" />
+        </div>
+
+        <div className="px-5 py-8 sm:px-8 lg:px-10 lg:py-12">
         {/* LOGO SECTION */}
-        <div className="flex flex-col items-center mb-10 text-center">
+        <div className="mb-8 flex flex-col items-center text-center lg:hidden">
           <motion.div
             whileHover={{ scale: 1.03 }}
             transition={{ duration: 0.3 }}
-            className="mb-5 flex h-28 w-full max-w-[320px] items-center justify-center px-4 drop-shadow-[0_0_24px_rgba(37,99,235,0.24)]"
+            className="mb-5 flex h-24 w-full max-w-[280px] items-center justify-center px-4 drop-shadow-[0_0_24px_rgba(37,99,235,0.24)]"
           >
             <Image
               src={geneLogo}
@@ -113,7 +140,7 @@ export default function LoginScreen() {
               className="h-auto w-full object-contain"
             />
           </motion.div>
-          <h1 className="text-3xl font-black text-white tracking-tighter italic uppercase">
+          <h1 className="text-3xl font-black tracking-tight text-white">
             Gene<span className="text-cyan-400">Labs</span>
           </h1>
           <p className="text-[10px] text-slate-500 font-mono tracking-[0.5em] uppercase mt-2">
@@ -122,8 +149,12 @@ export default function LoginScreen() {
         </div>
 
         {/* LOGIN CARD */}
-        <div className="glass-card p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden bg-white/[0.02] backdrop-blur-xl shadow-2xl">
-          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50" />
+        <div className="glass-card relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+          <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-70" />
+          <div className="mb-8">
+            <span className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-500">Secure Access</span>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Welcome back</h2>
+          </div>
           
           <form onSubmit={handleLogin} className="space-y-6">
             {/* ERROR DISPLAY */}
@@ -181,18 +212,6 @@ export default function LoginScreen() {
               </div>
             </div>
 
-            {/* PERSISTENCE INDICATOR */}
-            <div className="flex items-center gap-2 px-1 cursor-pointer group w-fit" onClick={() => {}}>
-              <div className="w-4 h-4 rounded border border-white/10 bg-white/5 flex items-center justify-center group-hover:border-cyan-400/50 transition-all">
-                <motion.div 
-                  initial={false}
-                  animate={{ scale: 1, opacity: 0.8 }}
-                  className="w-2 h-2 bg-cyan-400 rounded-sm" 
-                />
-              </div>
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-slate-300 transition-colors italic">Neural Persistence Active</span>
-            </div>
-
             {/* SUBMIT BUTTON */}
             <motion.button
               disabled={isSubmitting}
@@ -207,7 +226,7 @@ export default function LoginScreen() {
                 </>
               ) : (
                 <>
-                  Initialize Access
+                Login
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
@@ -215,22 +234,15 @@ export default function LoginScreen() {
           </form>
         </div>
 
-        {/* SECURITY INFO FOOTER */}
-        <div className="mt-8 flex justify-center items-center gap-6 opacity-40">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            <span className="text-[8px] font-bold text-white uppercase tracking-widest italic">Node_RSA_v4 Secure</span>
-          </div>
-          <div className="w-[1px] h-3 bg-slate-800" />
-          <span className="text-[8px] font-bold text-white uppercase tracking-widest tracking-[0.2em]">Build 2026.02.01</span>
         </div>
       </motion.div>
 
       {/* OVERLAY SYSTEM STATUS */}
       <div className="absolute bottom-4 left-0 w-full flex justify-between px-6 pointer-events-none opacity-20">
-        <span className="text-[8px] font-mono text-slate-500 tracking-tighter uppercase">GeneLabs Interface</span>
+        <span className="text-[8px] font-mono text-slate-500 tracking-tighter uppercase">GeneLabs Distribution</span>
         <span className="text-[8px] font-mono text-slate-500 tracking-tighter uppercase">Auth: RSA-4096-AES</span>
       </div>
     </div>
   );
 }
+

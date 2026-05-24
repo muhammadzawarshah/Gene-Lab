@@ -303,46 +303,58 @@ export default function InventoryTransferPro() {
   const customSelectStyles = {
     control: (base: any) => ({
       ...base,
-      backgroundColor: "#0f172a",
-      borderColor: "rgba(255, 255, 255, 0.05)",
+      backgroundColor: "#ffffff",
+      borderColor: "#cfe0f2",
       borderRadius: "14px",
       padding: "5px",
-      color: "white",
+      color: "#08233f",
       boxShadow: "none"
+    }),
+    input: (base: any) => ({
+      ...base,
+      color: "#08233f"
     }),
     menu: (base: any) => ({
       ...base,
-      backgroundColor: "#0b1224",
+      backgroundColor: "#ffffff",
       zIndex: 100
     }),
     option: (base: any, state: any) => ({
       ...base,
       backgroundColor: state.isFocused
-        ? "#1e293b"
-        : "transparent",
-      color: "white",
+        ? "#eaf3ff"
+        : "#ffffff",
+      color: "#08233f",
       fontSize: "13px"
     }),
     singleValue: (base: any) => ({
       ...base,
-      color: "white",
+      color: "#08233f",
       fontWeight: "600"
     }),
     placeholder: (base: any) => ({
       ...base,
       color: "#64748b"
+    }),
+    dropdownIndicator: (base: any) => ({
+      ...base,
+      color: "#2563eb"
+    }),
+    indicatorSeparator: (base: any) => ({
+      ...base,
+      backgroundColor: "#cfe0f2"
     })
   };
 
   const inputClass =
-    "w-full bg-[#0f172a] border border-white/5 rounded-xl py-2.5 px-3 text-white text-xs outline-none [&>option]:bg-[#0f172a] [&>option]:text-white";
+    "w-full bg-white border border-blue-100 rounded-xl py-2.5 px-3 text-slate-950 text-xs font-semibold outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 [&>option]:bg-white [&>option]:text-slate-950";
 
   const readOnlyInput =
-    "w-full bg-black/20 border border-white/5 rounded-xl py-2.5 px-3 text-slate-500 text-xs text-center outline-none cursor-not-allowed";
+    "w-full bg-white border border-blue-100 rounded-xl py-2.5 px-3 text-slate-700 text-xs text-center outline-none cursor-not-allowed";
 
   return (
     <div className="max-w-[1800px] mx-auto p-6 md:p-10 text-slate-300">
-      <Toaster richColors theme="dark" position="top-right" />
+      <Toaster richColors theme="light" position="top-right" />
 
       {/* HEADER */}
       <header className="flex items-center gap-6 mb-10 border-b border-white/5 pb-8">
@@ -423,7 +435,7 @@ export default function InventoryTransferPro() {
                   </td>
 
                   <td className="p-3 w-52">
-                    <select className={`${inputClass} !bg-blue-500/5 !border-blue-500/20 text-blue-400 font-bold`} disabled={!row.product_id} value={row.batch_no} onChange={(e) => handleInputChange(index, 'batch_no', e.target.value)}>
+                    <select className={`${inputClass} !bg-white !border-blue-200 !text-blue-900 font-bold`} disabled={!row.product_id} value={row.batch_no} onChange={(e) => handleInputChange(index, 'batch_no', e.target.value)}>
                       <option value="">Select Batch</option>
                       {row.batchOptions.map(b => <option key={b.batch_number} value={b.batch_number}>{b.batch_number}</option>)}
                     </select>
@@ -444,7 +456,7 @@ export default function InventoryTransferPro() {
                   <td className="p-3 w-32">
                     <input 
                       type="number" 
-                      className="bg-blue-600/10 ring-2 ring-blue-500/20 w-full text-center py-2.5 rounded-xl text-blue-400 font-black text-sm outline-none focus:ring-blue-500" 
+                      className="bg-white border border-blue-100 ring-2 ring-blue-100 w-full text-center py-2.5 rounded-xl text-blue-900 font-black text-sm outline-none focus:border-blue-400 focus:ring-blue-200" 
                       value={row.transferQty || ''} 
                       onChange={(e) => handleInputChange(index, 'transferQty', Number(e.target.value))} 
                     />

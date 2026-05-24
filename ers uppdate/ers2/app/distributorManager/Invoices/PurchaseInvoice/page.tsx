@@ -24,6 +24,19 @@ interface GRNLineItem {
 interface GRNReference {
   grn_id: number;
   grn_number: string;
+  po_id?: number | string | null;
+  purchaseorder?: {
+    po_id?: number | string | null;
+    purchase_order_id?: number | string | null;
+  } | null;
+  supplierinvoice?: unknown[] | null;
+  purchaseinvoice?: unknown[] | null;
+  invoice?: unknown[] | null;
+  supplier_invoice_id?: number | string | null;
+  purchase_invoice_id?: number | string | null;
+  invoice_id?: number | string | null;
+  is_invoiced?: boolean | null;
+  invoice_generated?: boolean | null;
 }
 
 export default function CreateInvoice() {
@@ -52,13 +65,31 @@ export default function CreateInvoice() {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
   };
 
+  const getPOId = (grn: GRNReference) =>
+    grn.purchaseorder?.po_id ??
+    grn.purchaseorder?.purchase_order_id ??
+    grn.po_id ??
+    grn.grn_id;
+
+  const hasGeneratedInvoice = (grn: GRNReference) =>
+    Boolean(
+      grn.is_invoiced ||
+      grn.invoice_generated ||
+      grn.supplier_invoice_id ||
+      grn.purchase_invoice_id ||
+      grn.invoice_id ||
+      (Array.isArray(grn.supplierinvoice) && grn.supplierinvoice.length > 0) ||
+      (Array.isArray(grn.purchaseinvoice) && grn.purchaseinvoice.length > 0) ||
+      (Array.isArray(grn.invoice) && grn.invoice.length > 0)
+    );
+
   // --- 1. Fetch Approved GRNs ---
   const fetchGRNList = useCallback(async () => {
     if (!token) return;
     try {
       const res = await api.get(`/api/v1/finance/invoice/grns/available`);
       const nextList = Array.isArray(res.data?.data) ? res.data.data : [];
-      setGrnList(nextList);
+      setGrnList(nextList.filter((grn: GRNReference) => !hasGeneratedInvoice(grn)));
     } catch (err) {
       toast.error("Database Error: Failed to fetch GRN records");
     }
@@ -141,7 +172,7 @@ export default function CreateInvoice() {
 
   return (
     <div className="text-white p-4 md:p-10 pb-24">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER */}
       <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-white/5 pb-10">
@@ -167,8 +198,8 @@ export default function CreateInvoice() {
               <option value="">
                 {grnList.length ? "-- SELECT GRN VAULT --" : "-- NO PENDING GRN FOUND --"}
               </option>
-              {grnList.map((grn) => (
-                <option key={grn.grn_id} value={grn.grn_id}>{grn.grn_number}</option>
+              {grnList.filter((grn) => !hasGeneratedInvoice(grn)).map((grn) => (
+                <option key={grn.grn_id} value={grn.grn_id}>PO #{getPOId(grn)}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500" size={20} />

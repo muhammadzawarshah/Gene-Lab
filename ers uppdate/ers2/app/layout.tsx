@@ -29,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="theme-light" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
@@ -39,10 +39,9 @@ export default function RootLayout({
             __html: `
               (function () {
                 try {
-                  var theme = localStorage.getItem('gene-theme');
-                  if (theme === 'light') {
-                    document.documentElement.classList.add('theme-light');
-                  }
+                  document.documentElement.classList.add('theme-light');
+                  document.documentElement.classList.remove('dark');
+                  localStorage.setItem('gene-theme', 'light');
                 } catch (error) {}
               })();
             `,

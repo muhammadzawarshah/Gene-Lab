@@ -94,7 +94,7 @@ export default function ChangePassword() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans flex items-center justify-center relative overflow-hidden bg-[#020617]">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* Background Glow */}
       <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />

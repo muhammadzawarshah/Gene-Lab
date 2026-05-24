@@ -147,12 +147,15 @@ export default function FullSecurePayment() {
 
   const labelClass = "text-[10px] font-black text-slate-500 uppercase mb-2 block ml-2 tracking-widest";
   const inputStyle = "bg-[#0f172a] border border-slate-800 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none w-full text-sm transition-all shadow-inner";
+  const amountReceivedPlaceholder = selectedInvoice && Number(selectedInvoice.paidAmount || 0) > 0
+    ? `Already received: PKR ${Number(selectedInvoice.paidAmount || 0).toLocaleString()}`
+    : "0.00";
 
   const hasResults = filteredInvoices.length > 0;
 
   return (
     <div className="text-slate-300 p-4 md:p-12 font-sans selection:bg-blue-500/30">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
       <div className="max-w-5xl mx-auto">
 
         {/* Header */}
@@ -335,7 +338,7 @@ export default function FullSecurePayment() {
                     <input
                       type="number"
                       className={`${inputStyle} text-lg font-black text-blue-400`}
-                      placeholder="0.00"
+                      placeholder={amountReceivedPlaceholder}
                       value={amountReceived}
                       onChange={(e) => setAmountReceived(e.target.value)}
                       max={Number(selectedInvoice.balanceAmount ?? selectedInvoice.total_amount ?? 0)}

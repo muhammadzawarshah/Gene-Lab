@@ -28,7 +28,7 @@ export class PartyService {
           type: data.type, // 'CUSTOMER', 'SUPPLIER', 'BOTH'
           email: data.email,
           phone: data.phone,
-          tax_id: data.tax_id ? parseInt(data.tax_id) : null,
+          tax_id: null,
           user_id: createdUserId,
           // Address nested create kar rahe hain
           addresses: {
@@ -118,7 +118,7 @@ export class PartyService {
           name:    data.name,
           email:   data.email,
           phone:   data.phone,
-          tax_id:  data.tax_id ? parseInt(data.tax_id) : undefined,
+          tax_id:  null,
           user_id: currentUserId,
           ...(data.address_line1 && {
             addresses: {

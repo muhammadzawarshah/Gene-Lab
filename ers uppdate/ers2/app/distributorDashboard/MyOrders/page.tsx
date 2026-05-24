@@ -11,6 +11,7 @@ import {
   Box, Info, Activity, Loader2, ShieldCheck
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { DataRibbon, EmptyState, PremiumHero, PremiumPage, SearchPanel, StatusPill } from "@/components/ui/premium";
 
 // --- Types ---
 type POStatus = 'Pending' | 'Approved' | 'Partially Delivered' | 'Delivered' | 'DRAFT';
@@ -113,11 +114,27 @@ export default function MyOrders() {
   }, [orders, searchQuery]);
 
   return (
-    <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans bg-[#020617]">
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage>
+      <Toaster position="top-right" theme="light" richColors />
       
       {/* HEADER - Same as your UI */}
-      <motion.div 
+      <PremiumHero
+        eyebrow="Distributor Consignments"
+        icon={Layers}
+        title={<>Live <span className="text-blue-500">Consignments</span></>}
+        description="Track your active orders, order status, delivery progression, and item-level breakdowns from the distributor node."
+        meta={<StatusPill tone="emerald">Secure Node: {currentUserId ? currentUserId.toString().slice(0, 8) : "Waiting"}</StatusPill>}
+      >
+        <DataRibbon
+          items={[
+            { label: "Orders", value: orders.length },
+            { label: "Visible", value: filteredOrders.length },
+            { label: "Items", value: filteredOrders.reduce((sum, order) => sum + order.totalItems, 0) },
+            { label: "Expanded", value: expandedId || "None" },
+          ]}
+        />
+      </PremiumHero>
+      {false && <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="mb-12 flex flex-col lg:flex-row items-center justify-between gap-8 bg-white/[0.01] border border-white/5 p-6 rounded-[2rem] backdrop-blur-3xl relative z-20"
@@ -145,10 +162,12 @@ export default function MyOrders() {
             className="w-full bg-[#050b1d] border border-white/10 rounded-full py-4 pl-14 pr-6 text-[10px] font-black tracking-[0.2em] outline-none focus:border-blue-500/40 transition-all text-white placeholder:text-slate-700"
           />
         </div>
-      </motion.div>
+      </motion.div>}
+
+      <SearchPanel className="mt-6" value={searchQuery} onChange={setSearchQuery} placeholder="Filter by order ID..." />
 
       {/* ORDER CARDS */}
-      <div className="grid grid-cols-1 gap-5 max-w-7xl mx-auto relative z-10">
+      <div className="relative z-10 mx-auto mt-6 grid max-w-7xl grid-cols-1 gap-5">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
@@ -168,11 +187,11 @@ export default function MyOrders() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ type: "spring", stiffness: 100, delay: index * 0.05 }}
                   className={cn(
-                    "relative group bg-gradient-to-br from-white/[0.03] to-transparent border border-white/5 rounded-[2.5rem] p-1 transition-all duration-500",
+                    "app-panel relative group rounded-[1.75rem] border border-white/5 p-1 transition-all duration-500",
                     isExpanded ? "border-blue-500/40 shadow-2xl shadow-blue-500/5" : "hover:border-white/20"
                   )}
                 >
-                  <div className="bg-[#020617] rounded-[2.3rem] overflow-hidden relative">
+                  <div className="relative overflow-hidden rounded-[1.55rem] bg-white/[0.48]">
                     <div className="p-8 flex flex-wrap lg:flex-nowrap items-center gap-10">
                       <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: theme.accent }} />
 
@@ -181,7 +200,7 @@ export default function MyOrders() {
                           <Hash size={12} className="text-blue-500" />
                           <span className="text-[10px] font-black uppercase tracking-widest">Reference</span>
                         </div>
-                        <h2 className="text-2xl font-black text-white italic">{order.id}</h2>
+                        <h2 className="text-2xl font-black tracking-tight text-white">{order.id}</h2>
                         <div className="flex items-center gap-2 text-slate-600 font-bold text-[10px]">
                           <Calendar size={12} /> {order.date}
                         </div>
@@ -193,7 +212,7 @@ export default function MyOrders() {
                             <div className={cn("p-2 rounded-xl", theme.glow)}>
                               <theme.icon size={18} style={{ color: theme.accent }} />
                             </div>
-                            <span className="text-xs font-black uppercase tracking-widest text-white italic">{order.status}</span>
+                            <StatusPill tone={order.status === "Delivered" ? "emerald" : order.status === "Approved" ? "blue" : order.status === "Partially Delivered" ? "amber" : "slate"}>{order.status}</StatusPill>
                           </div>
                           <span className="text-[10px] font-black text-slate-600 uppercase italic">{order.progress}% DISPATCHED</span>
                         </div>
@@ -293,13 +312,12 @@ export default function MyOrders() {
               );
             }) : (
               <div className="text-center py-20 bg-white/[0.01] border border-dashed border-white/10 rounded-[3rem]">
-                 <Package className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">No active consignments found.</p>
+                 <EmptyState icon={Package} title="No active consignments" description="No distributor orders match the current filter." />
               </div>
             )}
           </AnimatePresence>
         )}
       </div>
-    </div>
+    </PremiumPage>
   );
 }

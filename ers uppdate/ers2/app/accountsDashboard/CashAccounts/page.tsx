@@ -126,7 +126,7 @@ export default function AccountBalances() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans relative overflow-hidden">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
       
       {/* BACKGROUND DECOR (SECURE VIBE) */}
       <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">

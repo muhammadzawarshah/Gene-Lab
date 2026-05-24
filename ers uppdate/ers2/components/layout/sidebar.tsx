@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/app/context/authcontext";
@@ -10,20 +9,23 @@ import {
   ChevronRight,
   ChevronDown,
   CircleDot,
-  Activity,
   LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAVIGATION_CONFIG, type DropdownItem, type MenuItem } from "../../lib/NavigationData";
 
-export default function Sidebar() {
+type SidebarProps = {
+  onNavigate?: () => void;
+};
+
+export default function Sidebar({ onNavigate }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [openNested, setOpenNested] = useState<string | null>(null);
 
   const pathname = usePathname();
   const router = useRouter();
-  const { role, user, isLoading } = useAuth();
+  const { role, isLoading } = useAuth();
 
   const menuItems = useMemo(() => {
     if (!role) return [];
@@ -50,6 +52,28 @@ export default function Sidebar() {
     });
   }, [pathname, menuItems]);
 
+  useEffect(() => {
+    if (!menuItems.length) return;
+
+    const prefetchRoutes = () => {
+      menuItems.forEach((section) => {
+        if (section.href) router.prefetch(section.href);
+        section.items?.forEach((item) => {
+          if (item.href) router.prefetch(item.href);
+          item.subItems?.forEach((sub) => router.prefetch(sub.href));
+        });
+      });
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(prefetchRoutes, { timeout: 2500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeoutId = window.setTimeout(prefetchRoutes, 1200);
+    return () => window.clearTimeout(timeoutId);
+  }, [menuItems, router]);
+
   const toggleSection = (id: string) => setOpenSection(openSection === id ? null : id);
 
   const toggleNested = (event: React.MouseEvent, id: string) => {
@@ -57,40 +81,41 @@ export default function Sidebar() {
     setOpenNested(openNested === id ? null : id);
   };
 
+  const navigateTo = (href?: string) => {
+    if (!href) return;
+    router.push(href);
+    onNavigate?.();
+  };
+
   if (isLoading) {
-    return <div className="app-sidebar-surface h-full w-20 rounded-[2rem] animate-pulse" />;
+    return <div className="clinical-sidebar h-full w-20 animate-pulse" />;
   }
 
   return (
-    <motion.div
-      initial={{ x: -80, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
+    <div
       className={cn(
-        "app-sidebar-surface flex h-full flex-col overflow-hidden rounded-[2rem] text-slate-200 transition-all duration-500",
-        isCollapsed ? "w-20" : "w-72"
+        "clinical-sidebar flex h-full max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden text-slate-700 transition-all duration-500",
+        isCollapsed ? "w-[5.25rem]" : "w-[17rem]"
       )}
     >
-      <div className="border-b border-white/10 px-5 py-6">
+      <div className="relative border-b border-white/10 px-3 py-4">
+        <div className="absolute inset-x-4 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
         <div className="flex items-center gap-3">
-          <div className="relative h-12 w-12 flex-shrink-0 drop-shadow-[0_0_14px_rgba(37,99,235,0.24)]">
+          <div className="relative h-11 w-11 flex-shrink-0 rounded-2xl bg-white/70 p-1.5 shadow-inner">
             <Image src={geneLogo} alt="Gene Laboratories logo" fill className="object-contain" />
           </div>
 
           {!isCollapsed && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0 flex-1">
-              <span className="block truncate text-lg font-black italic tracking-tight text-white">
-                Gene<span className="text-blue-500">LABS</span>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-base font-black tracking-tight text-slate-950">
+                Gene<span className="text-blue-500"> Labs</span>
               </span>
-              <span className="mt-1 inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.3em] text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                {role || "System"}
-              </span>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>
 
-      <nav className="custom-scrollbar flex-1 space-y-2 overflow-y-auto px-3 py-4">
+      <nav className="custom-scrollbar flex-1 space-y-1 overflow-y-auto px-2.5 py-4">
         {menuItems.map((section: MenuItem) => {
           const isDropdown = section.type === "dropdown";
           const isOpen = openSection === section.id;
@@ -107,20 +132,20 @@ export default function Sidebar() {
           return (
             <div key={section.id} className="space-y-1">
               <button
-                onClick={() => (isDropdown ? toggleSection(section.id) : router.push(section.href!))}
-                className={cn(
-                  "group relative flex w-full items-center gap-3 rounded-[1.2rem] px-3 py-3 text-left transition-all duration-300",
+                onClick={() => (isDropdown ? toggleSection(section.id) : navigateTo(section.href))}
+                  className={cn(
+                  "group relative flex w-full items-center gap-3 rounded-[0.85rem] px-2.5 py-2.5 text-left transition-all duration-300",
                   isActive
-                    ? "app-soft-badge text-blue-500 shadow-[0_14px_30px_rgba(37,99,235,0.12)]"
-                    : "text-slate-500 hover:bg-blue-500/5 hover:text-white"
+                    ? "bg-gradient-to-r from-[#2563eb] to-[#7c3aed] text-white shadow-[0_8px_18px_rgba(79,70,229,0.14)]"
+                    : "text-slate-700 hover:bg-blue-500/10 hover:text-blue-700"
                 )}
               >
                 <div
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300",
+                    "flex h-9 w-9 items-center justify-center rounded-xl border transition-all duration-300",
                     isActive
-                      ? "border-blue-500/20 bg-blue-500/10 text-blue-500"
-                      : "border-white/10 bg-white/[0.03] group-hover:border-blue-500/15 group-hover:text-blue-400"
+                      ? "border-white/15 bg-white/10 text-cyan-300"
+                      : "border-blue-500/10 bg-white/65 text-slate-600 group-hover:border-blue-500/25 group-hover:text-blue-600"
                   )}
                 >
                   <Icon size={18} />
@@ -128,7 +153,7 @@ export default function Sidebar() {
 
                 {!isCollapsed && (
                   <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                    <span className="truncate text-xs font-bold uppercase tracking-[0.14em]">
+                    <span className="truncate text-[11px] font-black uppercase tracking-[0.13em]">
                       {section.label || section.title}
                     </span>
                     {isDropdown && (
@@ -143,14 +168,8 @@ export default function Sidebar() {
                 {isActive && <div className="absolute left-0 top-3 h-8 w-1 rounded-r-full bg-blue-500" />}
               </button>
 
-              <AnimatePresence>
-                {isDropdown && isOpen && !isCollapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-5 overflow-hidden border-l border-white/10 pl-3"
-                  >
+              {isDropdown && isOpen && !isCollapsed && (
+                  <div className="ml-5 overflow-hidden border-l border-white/10 pl-3">
                     {section.items?.map((item: DropdownItem, index: number) => (
                       <div key={item.id ?? item.label ?? index} className="mt-1">
                         {item.type === "nested" ? (
@@ -160,8 +179,8 @@ export default function Sidebar() {
                               className={cn(
                                 "flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all",
                                 openNested === item.id
-                                  ? "bg-blue-500/10 text-blue-400"
-                                  : "text-slate-500 hover:bg-blue-500/5 hover:text-white"
+                                  ? "bg-blue-500/10 text-blue-500"
+                                  : "text-slate-700 hover:bg-blue-500/10 hover:text-blue-700"
                               )}
                             >
                               <span className="flex items-center gap-2">
@@ -178,12 +197,12 @@ export default function Sidebar() {
                               item.subItems?.map((sub) => (
                                 <button
                                   key={sub.href}
-                                  onClick={() => router.push(sub.href)}
+                                  onClick={() => navigateTo(sub.href)}
                                   className={cn(
                                     "mt-1 block w-full rounded-xl px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.14em] transition-all",
                                     pathname === sub.href
-                                      ? "app-soft-badge text-blue-500"
-                                      : "text-slate-500 hover:bg-blue-500/5 hover:text-blue-400"
+                                      ? "bg-blue-500/10 text-blue-500"
+                                      : "text-slate-700 hover:bg-blue-500/10 hover:text-blue-700"
                                   )}
                                 >
                                   {sub.label}
@@ -192,12 +211,12 @@ export default function Sidebar() {
                           </div>
                         ) : (
                           <button
-                            onClick={() => item.href && router.push(item.href)}
+                            onClick={() => navigateTo(item.href)}
                             className={cn(
                               "block w-full rounded-xl px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.14em] transition-all",
                               pathname === item.href
-                                ? "app-soft-badge text-blue-500"
-                                : "text-slate-500 hover:bg-blue-500/5 hover:text-white"
+                                ? "bg-blue-500/10 text-blue-500"
+                                : "text-slate-700 hover:bg-blue-500/10 hover:text-blue-700"
                             )}
                           >
                             {item.label}
@@ -205,38 +224,21 @@ export default function Sidebar() {
                         )}
                       </div>
                     ))}
-                  </motion.div>
+                  </div>
                 )}
-              </AnimatePresence>
             </div>
           );
         })}
       </nav>
 
-      <div className="mt-auto border-t border-white/10 p-4">
-        {!isCollapsed && (
-          <div className="app-soft-badge mb-4 flex items-center gap-3 rounded-[1.5rem] px-3 py-3.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
-              <Activity className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-black uppercase tracking-[0.18em] text-white">
-                {user?.name || "System User"}
-              </span>
-              <span className="mt-1 block truncate text-[9px] font-bold uppercase tracking-[0.22em] text-blue-500">
-                {role || "No Role Found"}
-              </span>
-            </div>
-          </div>
-        )}
-
+      <div className="mt-auto border-t border-white/10 p-3">
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="app-soft-badge flex w-full items-center justify-center rounded-[1.25rem] p-3 transition-all hover:border-blue-500/25 hover:bg-blue-500/5"
+          className="flex w-full items-center justify-center rounded-[0.95rem] border border-white/10 bg-white/55 p-3 text-slate-500 transition-all hover:border-blue-500/25 hover:bg-blue-500/5"
         >
           <ChevronRight className={cn("transition-transform duration-500", !isCollapsed && "rotate-180")} />
         </button>
       </div>
-    </motion.div>
+    </div>
   );
 }

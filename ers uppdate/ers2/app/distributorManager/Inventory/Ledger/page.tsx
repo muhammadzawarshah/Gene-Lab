@@ -184,7 +184,7 @@ export default function WarehouseStockLedger() {
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 pb-20 p-6 min-h-screen text-slate-300">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
 
       {/* --- HEADER & CONTROLS (UI Untouched) --- */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8 border-b border-white/5 pb-10">

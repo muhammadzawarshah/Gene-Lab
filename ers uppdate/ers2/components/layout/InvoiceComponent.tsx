@@ -19,14 +19,21 @@ interface Order {
   salesorderline: OrderItem[];
   status: string;
   total_amount: any;
+  tp_discount?: any;
+  dd_discount?: any;
+  other_discount?: any;
+  tpDiscount?: any;
+  ddDiscount?: any;
+  otherDiscount?: any;
   order_date: string;
 }
 
 interface InvoiceProps {
   order: Order | null;
+  discountMode?: 'tp' | 'tp_dd' | 'all';
 }
 
-export const InvoiceComponent = ({ order }: InvoiceProps) => {
+export const InvoiceComponent = ({ order, discountMode = 'all' }: InvoiceProps) => {
   if (!order) return <div className="p-10 text-center text-gray-500">No Order Selected</div>;
 
   const formatDate = (dateStr: string) => {
@@ -41,15 +48,38 @@ export const InvoiceComponent = ({ order }: InvoiceProps) => {
     return isNaN(num) ? "0.00" : num.toLocaleString(undefined, { minimumFractionDigits: 2 });
   };
 
+  const toNumber = (amount: any) => {
+    const num = parseFloat(amount);
+    return isNaN(num) ? 0 : num;
+  };
+
   // Compute tax from lines (use first line's tax as order-level tax)
-  const grossSubtotal = order.salesorderline.reduce((s, i) => s + parseFloat(i.line_total || 0), 0);
+  const grossSubtotal = order.salesorderline.reduce((s, i) => s + toNumber(i.line_total), 0);
+  const tpPercent = toNumber(order.tp_discount ?? order.tpDiscount);
+  const ddPercent = toNumber(order.dd_discount ?? order.ddDiscount);
+  const otherPercent = toNumber(order.other_discount ?? order.otherDiscount);
+  const tpAmount = (grossSubtotal * tpPercent) / 100;
+  const ddAmount = (grossSubtotal * ddPercent) / 100;
+  const otherAmount = (grossSubtotal * otherPercent) / 100;
+  const discountRows = [
+    { label: 'TP', percent: tpPercent, amount: tpAmount },
+    { label: 'DD', percent: ddPercent, amount: ddAmount },
+    { label: 'Other', percent: otherPercent, amount: otherAmount },
+  ].filter((row) => {
+    if (row.percent <= 0) return false;
+    if (discountMode === 'tp') return row.label === 'TP';
+    if (discountMode === 'tp_dd') return row.label === 'TP' || row.label === 'DD';
+    return true;
+  });
+  const totalDiscountAmount = discountRows.reduce((sum, row) => sum + row.amount, 0);
   const firstTax = order.salesorderline.find(i => i.tax)?.tax ?? null;
   const taxAmount = firstTax
     ? firstTax.type === 'percentage'
-      ? (grossSubtotal * parseFloat(firstTax.rate)) / 100
-      : parseFloat(firstTax.rate)
-    : parseFloat(order.total_amount) - grossSubtotal;
+      ? (grossSubtotal * toNumber(firstTax.rate)) / 100
+      : toNumber(firstTax.rate)
+    : 0;
   const computedTaxAmount = isNaN(taxAmount) || taxAmount < 0 ? 0 : taxAmount;
+  const netTotal = grossSubtotal + computedTaxAmount - totalDiscountAmount;
 
   return (
     <div className="bg-white p-8 text-black shadow-sm mx-auto my-0 print:shadow-none print:p-0 w-full max-w-[800px] border h-[60vh] border-gray-100 print:border-none overflow-y-auto overflow-x-hidden">
@@ -141,11 +171,20 @@ export const InvoiceComponent = ({ order }: InvoiceProps) => {
                 <td className="border border-black px-2 py-1 text-right">+PKR {formatCurrency(computedTaxAmount)}</td>
               </tr>
             )}
+            {discountRows.map((row) => (
+              <tr key={row.label}>
+                <td colSpan={3} className="border-none"></td>
+                <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">
+                  {row.label} ({formatCurrency(row.percent)}%):
+                </td>
+                <td className="border border-black px-2 py-1 text-right">-PKR {formatCurrency(row.amount)}</td>
+              </tr>
+            ))}
             <tr>
               <td colSpan={3} className="border-none"></td>
               <td className="border border-black px-2 py-2 bg-gray-100 uppercase text-xs">Net Total</td>
               <td className="border border-black px-2 py-2 text-right bg-gray-100 text-sm decoration-double underline">
-                PKR {formatCurrency(order.total_amount)}
+                PKR {formatCurrency(netTotal)}
               </td>
             </tr>
           </tfoot>

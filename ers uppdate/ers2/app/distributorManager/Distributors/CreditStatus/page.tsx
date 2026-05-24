@@ -130,7 +130,7 @@ export default function CreditStatusPage() {
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-12 p-4">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
       
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">

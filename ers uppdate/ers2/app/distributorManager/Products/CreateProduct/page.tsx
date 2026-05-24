@@ -141,11 +141,11 @@ export default function AddProductDynamicPage() {
   const thClass = "px-4 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 bg-[#0b1224] whitespace-nowrap sticky top-0 z-20";
   const inputClass = "bg-transparent border-none outline-none text-sm text-slate-200 w-full placeholder:text-slate-700 focus:ring-1 ring-emerald-500/30 rounded py-1.5 px-2 transition-all";
   const inputDisabledClass = "bg-transparent border-none outline-none text-sm text-slate-500 w-full rounded py-1.5 px-2 cursor-not-allowed";
-  const selectClass = `${inputClass} bg-[#0b1224] text-white [color-scheme:dark]`;
+  const selectClass = `${inputClass} bg-[#0b1224] text-white`;
 
   return (
     <div className="text-slate-300 p-6 md:p-10 font-sans">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
 
       <div className="max-w-[1900px] mx-auto">
         <header className="flex items-center justify-between mb-10 border-b border-white/5 pb-8">

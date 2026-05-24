@@ -8,7 +8,7 @@ import { Toaster, toast } from 'sonner';
 import {
   Users, Search, UserPlus, MapPin, ShieldCheck,
   Trash2, Building2, Save, Loader2, Eye,
-  Edit3, X, Phone, Mail, Hash, FileText, Plus
+  Edit3, X, Phone, Mail, FileText, Plus
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -22,7 +22,6 @@ const emptyForm = {
   city: '',
   country: 'Pakistan',
   postal_code: '',
-  tax_id: '',
   type: 'CUSTOMER',
   password: '',
 };
@@ -115,7 +114,6 @@ export default function DistributorListPage() {
       city:          d.addresses?.[0]?.city || '',
       country:       d.addresses?.[0]?.country || 'Pakistan',
       postal_code:   d.addresses?.[0]?.postal_code || '',
-      tax_id:        d.tax_id?.toString() || '',
       type:          d.type || 'CUSTOMER',
       password:      '', // Don't populate password on edit
     });
@@ -143,7 +141,7 @@ export default function DistributorListPage() {
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 p-6 min-h-screen">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -284,7 +282,6 @@ export default function DistributorListPage() {
                 <div className="grid grid-cols-2 gap-6">
                   <InfoItem icon={<Mail size={13} />} label="Email" value={selected.email} />
                   <InfoItem icon={<Phone size={13} />} label="Phone" value={selected.phone} />
-                  <InfoItem icon={<Hash size={13} />} label="Tax ID" value={selected.tax_id} />
                   <InfoItem icon={<FileText size={13} />} label="Invoices" value={selected._count?.customerinvoice ?? 0} />
                 </div>
 
@@ -356,11 +353,6 @@ export default function DistributorListPage() {
                     <label className={labelCls}>Phone</label>
                     <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
                       placeholder="03xx-xxxxxxx" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Tax / NTN ID</label>
-                    <input value={form.tax_id} onChange={e => setForm({ ...form, tax_id: e.target.value })}
-                      placeholder="Tax ID" className={inputCls} />
                   </div>
                   <div>
                     <label className={labelCls}>Type</label>

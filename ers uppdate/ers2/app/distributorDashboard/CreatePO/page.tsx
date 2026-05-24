@@ -12,22 +12,25 @@ import {
 // --- TYPES ---
 interface Category { product_category_id: string; category: string; }
 interface Product  { product_id: string; name: string; }
+interface UOM { uom_id: number; name: string; sub_unit_name?: string | null; conversion_to_base?: string | number | null; }
 interface POItem {
   category_id: string;
   product_id: string;
+  uom_id: string;
   total_unit: number;
   approved_rate: number;
   amount: number;
 }
 
 const emptyRow = (): POItem => ({
-  category_id: '', product_id: '',
+  category_id: '', product_id: '', uom_id: '',
   total_unit: 0, approved_rate: 0, amount: 0,
 });
 
 export default function CreatePO() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories,   setCategories]   = useState<Category[]>([]);
+  const [uoms,         setUoms]         = useState<UOM[]>([]);
   const [productsMap,  setProductsMap]  = useState<Record<string, Product[]>>({});
   const [rows,         setRows]         = useState<POItem[]>([emptyRow(), emptyRow(), emptyRow()]);
 
@@ -39,8 +42,14 @@ export default function CreatePO() {
   useEffect(() => {
     if (!token) return;
     const h = { Authorization: `Bearer ${token}` };
-    axios.get(`${API}/api/v1/category/`, { headers: h })
-      .then(r => setCategories(r.data.category || []))
+    Promise.all([
+      axios.get(`${API}/api/v1/category/`, { headers: h }),
+      axios.get(`${API}/api/v1/erp/uom`, { headers: h }),
+    ])
+      .then(([categoryRes, uomRes]) => {
+        setCategories(categoryRes.data.category || []);
+        setUoms(uomRes.data.data || []);
+      })
       .catch(() => toast.error("Category fetch failed"));
   }, [token]);
 
@@ -82,6 +91,7 @@ export default function CreatePO() {
 
       if (field === 'category_id') {
         row.product_id    = '';
+        row.uom_id        = '';
         row.approved_rate = 0;
         row.amount        = 0;
         fetchProducts(value);
@@ -127,6 +137,7 @@ export default function CreatePO() {
         createdBy:   Number(currentUserId),
         items:       validItems.map(r => ({
           productId: r.product_id,
+          uomId:     r.uom_id,
           qty:       r.total_unit,
           price:     r.approved_rate,
         })),
@@ -144,10 +155,16 @@ export default function CreatePO() {
 
   const thCls  = "text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] p-4 border-b border-white/5";
   const inpCls = "w-full bg-[#0f172a] border border-slate-800 rounded-xl py-3 px-3 text-white focus:border-blue-500 outline-none transition-all text-xs font-medium appearance-none";
+  const formatUomLabel = (uom: UOM) => {
+    if (uom.sub_unit_name && uom.conversion_to_base) {
+      return `${uom.name} (1 ${uom.name} = ${uom.conversion_to_base} ${uom.sub_unit_name})`;
+    }
+    return uom.name;
+  };
 
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER */}
       <div className="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-8 border-l-8 border-blue-600 pl-6">
@@ -180,9 +197,10 @@ export default function CreatePO() {
                 <th className="w-12 p-4 text-center text-[10px] font-black text-slate-600 uppercase tracking-widest italic">S#</th>
                 <th className={thCls}>Category</th>
                 <th className={thCls}>Product</th>
+                <th className={thCls}>UOM</th>
                 <th className={thCls}>Qty</th>
-                <th className={thCls}>Rate (Wholesale)</th>
-                <th className={thCls}>Amount</th>
+                <th className="hidden">Rate</th>
+                <th className="hidden">Amount</th>
                 <th className="w-12" />
               </tr>
             </thead>
@@ -214,6 +232,17 @@ export default function CreatePO() {
                     </select>
                   </td>
 
+                  {/* UOM */}
+                  <td className="p-2 w-44">
+                    <select className={inpCls} value={row.uom_id}
+                      onChange={e => handleInputChange(index, 'uom_id', e.target.value)}>
+                      <option value="">Select UOM</option>
+                      {uoms.map(u => (
+                        <option key={u.uom_id} value={u.uom_id} className="bg-[#0f172a]">{formatUomLabel(u)}</option>
+                      ))}
+                    </select>
+                  </td>
+
                   {/* Qty */}
                   <td className="p-2 w-28">
                     <input type="number" className={inpCls + " text-center"} value={row.total_unit || ''}
@@ -221,14 +250,14 @@ export default function CreatePO() {
                   </td>
 
                   {/* Rate (auto-filled, not editable) */}
-                  <td className="p-2 w-36">
+                  <td className="hidden">
                     <div className="w-full bg-[#0a0f1e] border border-slate-800/50 rounded-xl py-3 px-3 text-right text-blue-400 font-mono text-xs select-none cursor-not-allowed">
                       {row.approved_rate ? row.approved_rate.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
                     </div>
                   </td>
 
                   {/* Amount */}
-                  <td className="p-4 text-right text-xs font-black text-white italic">{row.amount.toLocaleString()}</td>
+                  <td className="hidden">{row.amount.toLocaleString()}</td>
 
                   <td className="p-2">
                     <button type="button" onClick={() => removeRow(index)}
@@ -246,13 +275,13 @@ export default function CreatePO() {
         <div className="flex justify-end p-10 bg-white/[0.01] border-t border-white/5">
           <div className="bg-slate-900/50 rounded-[2rem] p-8 border border-white/5 space-y-4 shadow-inner w-full max-w-sm">
             <div className="flex justify-between items-center text-slate-500 text-[10px] font-bold uppercase tracking-widest italic">
-              <span>Gross Subtotal</span>
-              <span className="text-white">PKR {grossTotal.toLocaleString()}</span>
+              <span>Selected Products</span>
+              <span className="text-white">{rows.filter((row) => row.product_id).length}</span>
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-white/5">
-              <span className="text-white font-black text-sm uppercase italic">Total Payable</span>
+              <span className="text-white font-black text-sm uppercase italic">Total Quantity</span>
               <span className="text-4xl font-black text-blue-500 italic tracking-tighter">
-                PKR {grossTotal.toLocaleString()}
+                {rows.reduce((sum, row) => sum + Number(row.total_unit || 0), 0).toLocaleString()}
               </span>
             </div>
           </div>

@@ -190,7 +190,7 @@ export default function ExpiryManagement() {
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 pb-20 p-4 min-h-screen">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">

@@ -11,6 +11,7 @@ import {
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GRNReportComponent } from '@/components/layout/GRNReportComponent';
+import { printElementById } from '@/lib/printElement';
 import Link from 'next/link';
 import { format } from 'date-fns';
 
@@ -110,7 +111,7 @@ export default function GRNListPage() {
 
   return (
     <div className="text-slate-300 p-6 md:p-10 font-sans min-h-screen bg-[#0b1224]">
-      <Toaster richColors theme="dark" position="top-right" />
+      <Toaster richColors theme="light" position="top-right" />
 
       <div className="max-w-[1700px] mx-auto">
         {/* --- HEADER --- */}
@@ -232,7 +233,7 @@ export default function GRNListPage() {
                 <h3 className="text-white font-black italic uppercase ml-4">GRN Report Preview</h3>
                 <div className="flex gap-4">
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => printElementById("printable-area", "GRN Report")}
                     className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
                   >
                     Print PDF

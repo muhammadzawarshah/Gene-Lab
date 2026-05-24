@@ -121,7 +121,7 @@ export default function OutstandingBalance() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-200 relative overflow-hidden bg-[#020617]">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
       <ShieldCheck className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] text-white/[0.01] pointer-events-none" />
 
       {/* --- Header Section --- */}

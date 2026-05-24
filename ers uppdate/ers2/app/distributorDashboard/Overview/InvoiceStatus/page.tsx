@@ -96,7 +96,7 @@ export default function InvoiceStatus() {
 
   return (
     <div className="min-h-screen bg-[#020617] p-8 text-slate-200 relative">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/5 rounded-full blur-[150px] pointer-events-none" />
 
       {/* --- Header --- */}

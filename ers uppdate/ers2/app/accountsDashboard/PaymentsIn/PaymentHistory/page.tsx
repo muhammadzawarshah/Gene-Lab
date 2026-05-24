@@ -10,6 +10,7 @@ import {
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PaymentReportComponent } from '@/components/layout/PaymentReportComponent';
+import { printElementById } from '@/lib/printElement';
 
 const methodColor: Record<string, string> = {
   CASH:         'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
@@ -67,7 +68,7 @@ export default function PaymentsInHistory() {
 
   return (
     <div className="text-slate-300 p-4 md:p-10 font-sans min-h-screen">
-      <Toaster richColors theme="dark" position="top-right" />
+      <Toaster richColors theme="light" position="top-right" />
 
       <div className="max-w-[1400px] mx-auto space-y-8">
 
@@ -196,15 +197,7 @@ export default function PaymentsInHistory() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => {
-                    const printContent = document.getElementById('payment-report-print');
-                    if (printContent) {
-                      const originalContent = document.body.innerHTML;
-                      document.body.innerHTML = printContent.outerHTML;
-                      window.print();
-                      window.location.reload();
-                    }
-                  }}
+                  onClick={() => printElementById("payment-report-print", "Payment In Report")}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all"
                 >
                   Print Report

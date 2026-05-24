@@ -6,12 +6,14 @@ import Cookies from 'js-cookie';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
 import {
-  Search, FileText, Printer, Send, Eye,
-  MoreVertical, CheckCircle, Truck,
-  Download, Mail, Trash2, ExternalLink, Loader2, Lock, X
+  Search, FileText, Printer, Eye,
+  CheckCircle, Truck,
+  Download, Loader2, Lock, X
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { CustInvoiceReportComponent } from '@/components/layout/CustInvoiceReportComponent';
+import { printElementById } from '@/lib/printElement';
+import { DataRibbon, EmptyState, PremiumHero, PremiumPage, SearchPanel, StatusPill } from '@/components/ui/premium';
 
 // --- Types ---
 interface Invoice {
@@ -29,7 +31,6 @@ export default function SalesInvoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [isFetchingInvoice, setIsFetchingInvoice] = useState(false);
 
@@ -87,32 +88,7 @@ export default function SalesInvoices() {
 
   // --- PRINT ---
   const handlePrint = () => {
-    const printContent = document.getElementById('invoice-print-area');
-    if (printContent) {
-      const originalContent = document.body.innerHTML;
-      document.body.innerHTML = printContent.outerHTML;
-      window.print();
-      window.location.reload();
-    }
-  };
-
-  // --- WHATSAPP ---
-  const handleWhatsApp = (inv: Invoice) => {
-    const text = `Invoice from Gene Laboratories: ${inv.client}. ID: ${inv.id}, Total: PKR ${inv.amount.toLocaleString()}. Status: ${inv.status}.`;
-    window.open(`https://wa.me/${inv.contact}?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  // --- DELETE ---
-  const handleDelete = async (id: string) => {
-    const toastId = toast.loading("Deleting record...");
-    try {
-      await secureApi.delete(`/sales/invoices/${id}`, { data: { userId } });
-      setInvoices(prev => prev.filter(i => i.id !== id));
-      toast.success("Record deleted", { id: toastId });
-      setActiveMenu(null);
-    } catch {
-      toast.error("Delete failed", { id: toastId });
-    }
+    printElementById("invoice-print-area", "Sales Invoice");
   };
 
   // --- EXPORT CSV ---
@@ -143,11 +119,35 @@ export default function SalesInvoices() {
   }, [safeSearch, invoices]);
 
   return (
-    <div className="p-4 md:p-10 text-slate-300 font-sans" onClick={() => setActiveMenu(null)}>
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage>
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12">
+      <PremiumHero
+        eyebrow="Billing Engine"
+        icon={FileText}
+        title={<>Sales <span className="text-blue-500">Invoices</span></>}
+        description="A polished receivables workspace for invoice review, CSV export, WhatsApp send, invoice preview, and print actions."
+        meta={<StatusPill tone="blue">UID: {userId?.slice(0,8) || "Secure"}</StatusPill>}
+        actions={
+          <button
+            onClick={(e) => { e.stopPropagation(); handleExport(); }}
+            className="flex items-center gap-3 rounded-[1rem] bg-blue-600 px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500"
+          >
+            <Download size={16} /> Export Data
+          </button>
+        }
+      >
+        <DataRibbon
+          items={[
+            { label: "Invoices", value: invoices.length },
+            { label: "Visible", value: filteredInvoices.length },
+            { label: "Receivable", value: `PKR ${filteredInvoices.reduce((sum, inv) => sum + inv.amount, 0).toLocaleString()}` },
+            { label: "Items", value: filteredInvoices.reduce((sum, inv) => sum + inv.items, 0) },
+          ]}
+        />
+      </PremiumHero>
+      {false && <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
           <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase">
             Sales <span className="text-blue-500">Invoices</span>
@@ -166,10 +166,11 @@ export default function SalesInvoices() {
         >
           <Download size={16} /> Export Data
         </button>
-      </div>
+      </div>}
 
       {/* SEARCH BAR */}
-      <div className="bg-[#050b1d] border border-white/5 rounded-[2.5rem] p-4 mb-8 shadow-2xl overflow-hidden relative">
+      <SearchPanel className="mt-6" value={search} onChange={setSearch} placeholder="Search by client or invoice number..." />
+      {false && <div className="bg-[#050b1d] border border-white/5 rounded-[2.5rem] p-4 mb-8 shadow-2xl overflow-hidden relative">
         <div className="relative">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
           <input
@@ -180,10 +181,10 @@ export default function SalesInvoices() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-      </div>
+      </div>}
 
       {/* INVOICE LIST */}
-      <div className="grid grid-cols-1 gap-4">
+      <div className="mt-6 grid grid-cols-1 gap-4">
         {isLoading ? (
           <div className="py-32 flex flex-col items-center gap-4">
             <Loader2 className="animate-spin text-blue-500" size={40} />
@@ -198,7 +199,7 @@ export default function SalesInvoices() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-[#050b1d] border border-white/5 hover:border-blue-500/30 p-6 md:p-8 rounded-[3rem] flex flex-col md:flex-row items-center justify-between gap-6 transition-all group shadow-xl"
+                className="app-panel group flex flex-col items-center justify-between gap-6 rounded-[1.75rem] border border-white/5 p-5 shadow-xl transition-all hover:border-blue-500/30 md:flex-row md:p-6"
               >
                 <div className="flex items-center gap-6 w-full md:w-auto">
                   <div className={cn(
@@ -209,7 +210,7 @@ export default function SalesInvoices() {
                   </div>
                   <div>
                     <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-xl font-black text-white italic uppercase tracking-tighter group-hover:text-blue-400 transition-colors">{inv.client}</h3>
+                      <h3 className="text-xl font-black tracking-tight text-white transition-colors group-hover:text-blue-400">{inv.client}</h3>
                       <span className="text-[9px] font-black px-3 py-1 bg-white/5 rounded-lg text-slate-600 border border-white/5">{inv.id}</span>
                     </div>
                     <div className="flex items-center gap-4 text-[10px] font-bold text-slate-500 uppercase italic tracking-wider">
@@ -222,7 +223,7 @@ export default function SalesInvoices() {
                 <div className="flex items-center justify-between md:justify-end gap-10 w-full md:w-auto border-t md:border-none border-white/5 pt-6 md:pt-0">
                   <div className="text-right">
                     <p className="text-[9px] font-black text-slate-600 uppercase mb-1 tracking-widest">Gross Receivable</p>
-                    <p className="text-2xl font-black text-white italic tracking-tighter">PKR {inv.amount.toLocaleString()}</p>
+                    <p className="text-2xl font-black tracking-tight text-white">PKR {inv.amount.toLocaleString()}</p>
                   </div>
 
                   <div className="flex items-center gap-3 relative">
@@ -234,47 +235,6 @@ export default function SalesInvoices() {
                     >
                       <Eye size={20} />
                     </button>
-
-                    {/* WHATSAPP */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleWhatsApp(inv); }}
-                      className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all shadow-lg shadow-emerald-500/10"
-                    >
-                      <Send size={20} />
-                    </button>
-
-                    {/* MORE */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === inv.id ? null : inv.id); }}
-                      className="p-4 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 transition-all border border-white/5"
-                    >
-                      <MoreVertical size={20} />
-                    </button>
-
-                    <AnimatePresence>
-                      {activeMenu === inv.id && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.9, x: 20 }}
-                          animate={{ opacity: 1, scale: 1, x: 0 }}
-                          exit={{ opacity: 0, scale: 0.9, x: 20 }}
-                          className="absolute right-0 top-20 z-[100] w-56 bg-[#0f172a] border border-white/10 rounded-[1.8rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-3 backdrop-blur-xl"
-                        >
-                          <button className="w-full flex items-center gap-4 px-4 py-4 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-400 hover:text-white transition-all tracking-[0.2em]">
-                            <Mail size={16} className="text-blue-500" /> Send Email
-                          </button>
-                          <button className="w-full flex items-center gap-4 px-4 py-4 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-400 hover:text-white transition-all tracking-[0.2em]">
-                            <ExternalLink size={16} className="text-amber-500" /> Audit Trail
-                          </button>
-                          <div className="h-[1px] bg-white/5 my-2 mx-2" />
-                          <button
-                            onClick={() => handleDelete(inv.id)}
-                            className="w-full flex items-center gap-4 px-4 py-4 hover:bg-rose-500/10 rounded-2xl text-[9px] font-black uppercase text-rose-500 transition-all tracking-[0.2em]"
-                          >
-                            <Trash2 size={16} /> Delete Record
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </div>
                 </div>
               </motion.div>
@@ -285,11 +245,7 @@ export default function SalesInvoices() {
         {/* EMPTY STATE */}
         {!isLoading && filteredInvoices.length === 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-40 text-center">
-            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-800 border border-white/5">
-              <FileText size={48} />
-            </div>
-            <h3 className="text-2xl font-black text-slate-500 uppercase italic tracking-tighter">No Invoices Found</h3>
-            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.4em] mt-3">Ready for new transactions</p>
+            <EmptyState icon={FileText} title="No invoices found" description="No sales invoices match the current search filter." />
           </motion.div>
         )}
       </div>
@@ -351,6 +307,6 @@ export default function SalesInvoices() {
           </div>
         </div>
       )}
-    </div>
+    </PremiumPage>
   );
 }

@@ -521,7 +521,7 @@ static async processPayment(data: {
           _sum: { allocated_amount: true }
         });
         const totalPaid = Number(allocationSummary._sum.allocated_amount || 0);
-        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : totalPaid > 0 ? 'PARTIAL' : 'POSTED';
+        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'POSTED';
 
         await tx.customerinvoice.update({
           where: { cust_inv_id: Number(invoiceId) },
@@ -1323,10 +1323,23 @@ static async getAccountsDashboard() {
   // PARTY LEDGER SUMMARY
   // ─────────────────────────────────────────────
   static async getPartyLedgerSummary(type: 'CUSTOMER' | 'SUPPLIER') {
+    const receivableAccount = type === 'CUSTOMER'
+      ? await prisma.glaccount.findFirst({
+          where: {
+            OR: [
+              { gl_account_code: '1.3' },
+              { name: 'Accounts Receivable' }
+            ]
+          },
+          select: { gl_account_id: true }
+        })
+      : null;
+
     const parties = await prisma.party.findMany({
       where: { type: type as any },
       include: {
         journalline: {
+          where: receivableAccount ? { gl_account_id: receivableAccount.gl_account_id } : undefined,
           select: { debit: true, credit: true }
         }
       }
@@ -1399,6 +1412,85 @@ static async getAccountsDashboard() {
   // ─────────────────────────────────────────────
   // DASHBOARD MODULES (RECEIVABLES, PENDING, HISTORY)
   // ─────────────────────────────────────────────
+  static async getCustomerReceivableLedgerDetails(partyId: string) {
+    const receivableAccount = await prisma.glaccount.findFirst({
+      where: {
+        OR: [
+          { gl_account_code: '1.3' },
+          { name: 'Accounts Receivable' }
+        ]
+      },
+      select: { gl_account_id: true }
+    });
+
+    if (!receivableAccount) {
+      throw new Error('Accounts Receivable account not found in chart of accounts.');
+    }
+
+    const lines = await prisma.journalline.findMany({
+      where: {
+        party_id_sub_ledger: partyId,
+        gl_account_id: receivableAccount.gl_account_id,
+      },
+      include: { journalentry: true },
+      orderBy: { journalentry: { date: 'asc' } }
+    });
+
+    const custInvIds = lines
+      .filter(l => l.journalentry.source_type === 'CUSTOMER_INVOICE' && l.journalentry.source_id)
+      .map(l => l.journalentry.source_id!);
+    const paymentIds = lines
+      .filter(l => ['PAYMENT', 'RECEIPT'].includes(String(l.journalentry.source_type)) && l.journalentry.source_id)
+      .map(l => l.journalentry.source_id!);
+
+    const [custInvoices, payments] = await Promise.all([
+      custInvIds.length
+        ? prisma.customerinvoice.findMany({
+            where: { cust_inv_id: { in: custInvIds } },
+            select: { cust_inv_id: true, cust_invoice_number: true }
+          })
+        : [],
+      paymentIds.length
+        ? prisma.payment.findMany({
+            where: { payment_id: { in: paymentIds } },
+            select: { payment_id: true, payment_number: true, reference_number: true }
+          })
+        : [],
+    ]);
+
+    const invoiceMap: Record<number, string> = Object.fromEntries(
+      custInvoices.map(i => [i.cust_inv_id, i.cust_invoice_number || `INV-${i.cust_inv_id}`])
+    );
+    const paymentMap: Record<number, string> = Object.fromEntries(
+      payments.map(p => [p.payment_id, p.payment_number || p.reference_number || `RCPT-${p.payment_id}`])
+    );
+
+    let runningBalance = 0;
+    return lines.map(l => {
+      const dr = Number(l.debit) || 0;
+      const cr = Number(l.credit) || 0;
+      runningBalance += dr - cr;
+
+      const sourceType = l.journalentry.source_type;
+      const sourceId = l.journalentry.source_id || 0;
+      const reference = sourceType === 'CUSTOMER_INVOICE'
+        ? invoiceMap[sourceId]
+        : ['PAYMENT', 'RECEIPT'].includes(String(sourceType))
+          ? paymentMap[sourceId]
+          : null;
+
+      return {
+        id: l.journalentry.journal_number,
+        invoice_ref: reference || null,
+        date: new Date(l.journalentry.date).toLocaleDateString('en-GB'),
+        type: dr > 0 ? 'Invoice' : 'Payment',
+        description: l.journalentry.narration || l.journalentry.journal_type,
+        debit: dr,
+        credit: cr,
+        balance: runningBalance
+      };
+    });
+  }
 
   static async getReceivables() {
     const invoices = await prisma.customerinvoice.findMany({

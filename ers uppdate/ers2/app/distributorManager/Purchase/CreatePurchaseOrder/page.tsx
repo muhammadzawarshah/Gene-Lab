@@ -122,7 +122,7 @@ export default function CreatePurchaseOrder() {
 
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       <div className="mb-10 flex justify-between items-end border-l-8 border-blue-600 pl-6">
         <div>

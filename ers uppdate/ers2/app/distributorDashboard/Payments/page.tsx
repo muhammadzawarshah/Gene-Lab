@@ -108,7 +108,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* --- PAGE HEADER --- */}
       <motion.div

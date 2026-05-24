@@ -98,7 +98,7 @@ export default function RecentPOs() {
 
   return (
     <div className="min-h-screen p-8 text-slate-200 bg-[#020617] relative overflow-hidden">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
       
       {/* Background Decorative Glow */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />

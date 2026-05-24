@@ -11,6 +11,14 @@ import {
   Box, Truck, ChevronRight, BarChart3, Loader2
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import {
+  DataRibbon,
+  MetricCard,
+  PharmaKitVisual,
+  PremiumAreaChart,
+  PremiumHero,
+  PremiumPage,
+} from "@/components/ui/premium";
 
 // --- Types for Data Integrity ---
 interface DashboardData {
@@ -100,9 +108,11 @@ export default function DistributorDashboard() {
   }, [fetchDashboardStats]);
 
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] gap-4">
-      <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-500 animate-pulse">Syncing Gene Node...</p>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+      <div className="app-panel-strong flex flex-col items-center rounded-[2rem] px-10 py-8">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+        <p className="mt-4 text-[10px] font-black uppercase tracking-[0.35em] text-blue-500">Syncing Dashboard</p>
+      </div>
     </div>
   );
 
@@ -116,67 +126,90 @@ export default function DistributorDashboard() {
   ];
 
   return (
-    <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans bg-[#020617]">
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage>
+      <Toaster position="top-right" theme="light" richColors />
       
       {/* --- HEADER --- */}
-      <div className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <PremiumHero
+        eyebrow="Distributor Workspace"
+        title={<>Gene <span className="text-blue-600">Command</span></>}
+        description="A distributor operations cockpit for orders, credit exposure, shipments, alerts, and procurement movement."
+        meta={<span className="app-soft-badge rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Node ID: {currentUserId?.slice(0, 8) || "Pending"}</span>}
+        actions={<div className="app-soft-badge flex items-center gap-3 rounded-full px-5 py-3"><div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /><span className="text-[10px] font-black uppercase tracking-widest text-white">Live Link: Stable</span></div>}
+      >
+        <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <DataRibbon
+            items={[
+              { label: "Active Orders", value: data.stats.activeOrders },
+              { label: "Pending Invoices", value: data.stats.pendingInvoices },
+              { label: "Credit Used", value: `${data.stats.creditUsedPercentage}%` },
+              { label: "Monthly Growth", value: data.stats.monthlyGrowth },
+            ]}
+          />
+          <PharmaKitVisual className="hidden scale-90 lg:block" />
+        </div>
+      </PremiumHero>
+      {false && <section className="app-panel-strong mb-8 overflow-hidden rounded-[2rem] p-6 md:p-8">
+      <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase">Gene <span className="text-blue-600">Command</span></h1>
+          <span className="app-soft-badge mb-4 inline-flex rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Distributor Workspace</span>
+          <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">Gene <span className="text-blue-600">Command</span></h1>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-1">
              Operational Overview • Node ID: {currentUserId?.slice(0, 8)}
           </p>
         </motion.div>
-        <div className="px-5 py-2 bg-white/5 border border-white/10 rounded-xl flex items-center gap-3">
+        <div className="app-soft-badge flex items-center gap-3 rounded-full px-5 py-3">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-[10px] font-black uppercase tracking-widest text-white">Live Link: Stable</span>
         </div>
       </div>
+      </section>}
 
       {/* --- STATS GRID --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
         {statsDisplay.map((stat, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
-            className="bg-white/[0.02] border border-white/5 p-6 rounded-[2rem] hover:border-white/10 transition-all group"
-          >
-            <div className={cn("p-3 rounded-2xl w-fit mb-4 transition-transform group-hover:scale-110", stat.bg)}>
-              <stat.icon className={cn("w-5 h-5", stat.color)} />
-            </div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</p>
-            <h2 className="text-2xl font-black text-white mt-1 italic">{stat.value}</h2>
-          </motion.div>
+          <MetricCard
+            key={stat.label}
+            label={stat.label}
+            value={stat.value}
+            icon={stat.icon}
+            tone={i === 1 ? "amber" : i === 2 ? "emerald" : i === 3 ? "violet" : "blue"}
+            note={i === 2 ? "Credit exposure in current cycle." : "Live operational metric."}
+          />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
           {/* --- PROCUREMENT CHART --- */}
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="bg-gradient-to-br from-blue-600/20 to-transparent border border-blue-500/20 rounded-[2.5rem] p-8"
+            className="app-panel-strong rounded-[2rem] p-6 md:p-8"
           >
-            <div className="flex justify-between items-start mb-10">
+            <div className="mb-10 flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-black text-white italic uppercase tracking-tight">Procurement Trend</h3>
+                <h3 className="text-xl font-black tracking-tight text-white">Procurement Trend</h3>
                 <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">Real-time Volume Analysis (Last 7 Days)</p>
               </div>
               <BarChart3 className="text-blue-500/50 w-8 h-8" />
             </div>
-            <div className="flex items-end justify-between h-48 gap-2">
-              {data.procurementTrend.map((h, i) => (
-                <motion.div key={i} initial={{ height: 0 }} animate={{ height: `${Math.max(h, 5)}%` }}
-                  transition={{ delay: i * 0.05, duration: 1 }}
-                  className="flex-1 bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg opacity-80 hover:opacity-100 transition-opacity"
-                />
-              ))}
+            <div className="rounded-[1.5rem] bg-white/55 p-4">
+              <PremiumAreaChart
+                data={data.procurementTrend.map((value, index) => ({
+                  label: `D${index + 1}`,
+                  value: Number(value || 0),
+                }))}
+                color="#2563eb"
+                label="Procurement"
+              />
             </div>
           </motion.div>
 
           {/* --- SHIPMENTS --- */}
-          <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8">
-            <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em] italic mb-8">Active Shipments</h3>
+          <div className="app-panel rounded-[2rem] p-6 md:p-8">
+            <h3 className="mb-6 text-xl font-black tracking-tight text-white">Active Shipments</h3>
             <div className="space-y-4">
               {data.recentShipments.length > 0 ? data.recentShipments.map((shipment) => (
-                <div key={shipment.id} className="flex items-center justify-between p-4 bg-[#050b1d] border border-white/5 rounded-2xl hover:border-blue-500/30 transition-all">
+                <div key={shipment.id} className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/[0.55] p-4 transition-all hover:border-blue-500/30 hover:shadow-md">
                   <div className="flex items-center gap-4">
                     <div className="p-3 bg-white/5 rounded-xl"><Truck size={18} className="text-slate-500" /></div>
                     <div>
@@ -187,7 +220,7 @@ export default function DistributorDashboard() {
                   <ChevronRight size={16} className="text-slate-800" />
                 </div>
               )) : (
-                <div className="py-8 text-center text-[10px] font-black uppercase text-slate-600 tracking-widest italic border border-dashed border-white/5 rounded-2xl">
+                <div className="rounded-2xl border border-dashed border-white/10 py-8 text-center text-[10px] font-black uppercase tracking-widest text-slate-500">
                    No shipments in transit
                 </div>
               )}
@@ -198,7 +231,7 @@ export default function DistributorDashboard() {
         {/* --- SIDEBAR --- */}
         <div className="space-y-8">
           {/* CREDIT CARD */}
-          <div className="bg-[#050b1d] border border-white/5 rounded-[2.5rem] p-8 relative overflow-hidden">
+          <div className="app-panel relative overflow-hidden rounded-[2rem] p-6 md:p-8">
             <Zap className="absolute right-[-10px] top-[-10px] w-32 h-32 text-emerald-500/5 -rotate-12" />
             <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em] mb-6">Credit Liquidity</h3>
             <div className="space-y-6">
@@ -207,7 +240,7 @@ export default function DistributorDashboard() {
                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Spent: PKR {data.creditDetails.used}</span>
                   <span className="text-[9px] font-black text-white">Limit: {data.creditDetails.total}</span>
                 </div>
-                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${data.stats.creditUsedPercentage}%` }}
                     className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
                   />
@@ -220,12 +253,12 @@ export default function DistributorDashboard() {
           </div>
 
           {/* ALERTS */}
-          <div className="bg-rose-500/5 border border-rose-500/10 rounded-[2.5rem] p-8">
+          <div className="app-panel rounded-[2rem] border-rose-500/10 p-6 md:p-8">
             <h3 className="text-[10px] font-black text-rose-500 uppercase tracking-[0.3em] mb-6">Security Alerts</h3>
             <div className="space-y-4">
               {data.alerts.map((alert) => (
                 <div key={alert.id} className="p-4 bg-rose-500/10 rounded-2xl border border-rose-500/10">
-                  <p className="text-[10px] font-black text-white uppercase italic">{alert.message}</p>
+                  <p className="text-[10px] font-black text-white uppercase">{alert.message}</p>
                   <p className="text-[8px] font-bold text-rose-400/70 mt-1 uppercase">{alert.subtext}</p>
                 </div>
               ))}
@@ -233,6 +266,6 @@ export default function DistributorDashboard() {
           </div>
         </div>
       </div>
-    </div>
+    </PremiumPage>
   );
 }

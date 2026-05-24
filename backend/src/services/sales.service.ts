@@ -139,6 +139,14 @@ export class SalesService {
 
   static async createCusOrder(data: any) {
     return await prisma.$transaction(async (tx) => {
+      const itemProductIds = Array.from(
+        new Set(
+          (data.items || [])
+            .map((item: any) => item.product_id || item.productId)
+            .filter(Boolean)
+        )
+      ) as string[];
+      const productDefaults = await SalesService.getOrderProductDefaults(tx, itemProductIds);
 
       const party = await tx.party.findFirst({
         where: {
@@ -166,16 +174,22 @@ export class SalesService {
 
       // 2. Loop through lines
       for (const item of data.items) {
-        const quantity = Number(item.qty || item.quantity || 0);
+        const productId = item.product_id || item.productId;
+        const defaults = productDefaults.get(productId);
+        const quantity = Number(item.total_unit || item.qty || item.quantity || 0);
+        const salePrice = SalesService.parseOptionalNumber(item.price ?? item.sale_price ?? item.approved_rate) ?? defaults?.sale_price ?? 0;
+        const lineTotal = SalesService.parseOptionalNumber(item.amount) ?? (quantity * salePrice);
 
         await tx.salesorderline.create({
           data: {
             so_id: order.so_id,
-            product_id: item.productId,
+            product_id: productId,
             quantity: quantity,
-            uom_id: Number(item.uomId),
-            unit_price: item.price,
-            line_total: quantity * item.price,
+            uom_id: Number(item.uomId || item.uom_id || defaults?.uom_id) || 1,
+            unit_price: salePrice,
+            line_total: lineTotal,
+            sale_price: salePrice,
+            purchase_price: defaults?.purchase_price ?? null,
             batch_id: null
           } as any
         });
@@ -479,6 +493,88 @@ export class SalesService {
   }
 
   // ─── Update Order ───────────────────────────────────────────────────────────
+  static async getCustomerMonthlySalesReport(userId: string, reportMonth: string) {
+    const party = await prisma.party.findFirst({
+      where: { user_id: Number(userId) } as any
+    });
+
+    if (!party) throw new Error("PARTY_NOT_FOUND");
+
+    return prisma.monthlysalesreport.findMany({
+      where: {
+        party_id: party.party_id,
+        report_month: reportMonth
+      },
+      include: {
+        product: { select: { product_id: true, name: true, sku_code: true } }
+      },
+      orderBy: { updated_at: 'desc' }
+    } as any);
+  }
+
+  static async getManagerMonthlySalesReport(reportMonth: string) {
+    if (!reportMonth) throw new Error("Report month is required.");
+
+    return prisma.monthlysalesreport.findMany({
+      where: {
+        report_month: reportMonth
+      },
+      include: {
+        party: { select: { party_id: true, name: true, user_id: true } },
+        product: { select: { product_id: true, name: true, sku_code: true } }
+      },
+      orderBy: { updated_at: 'desc' }
+    } as any);
+  }
+
+  static async submitCustomerMonthlySalesReport(data: any) {
+    const party = await prisma.party.findFirst({
+      where: { user_id: Number(data.userId) } as any
+    });
+
+    if (!party) throw new Error("PARTY_NOT_FOUND");
+    if (!data.reportMonth) throw new Error("Report month is required.");
+
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) throw new Error("At least one product line is required.");
+
+    return prisma.$transaction(async (tx) => {
+      const saved = [];
+
+      for (const item of items) {
+        const productId = item.product_id || item.productId;
+        const soldQty = Number(item.sold_qty ?? item.soldQty ?? 0);
+
+        if (!productId || !Number.isFinite(soldQty) || soldQty < 0) continue;
+
+        const row = await tx.monthlysalesreport.upsert({
+          where: {
+            party_id_product_id_report_month: {
+              party_id: party.party_id,
+              product_id: productId,
+              report_month: data.reportMonth
+            }
+          },
+          update: {
+            sold_qty: soldQty,
+            remarks: data.remarks || null
+          },
+          create: {
+            party_id: party.party_id,
+            product_id: productId,
+            report_month: data.reportMonth,
+            sold_qty: soldQty,
+            remarks: data.remarks || null
+          }
+        } as any);
+
+        saved.push(row);
+      }
+
+      return saved;
+    });
+  }
+
   static async updateOrder(orderId: number, data: any) {
     return await prisma.$transaction(async (tx) => {
       const existingOrder = await tx.salesorder.findUnique({
@@ -586,7 +682,26 @@ export class SalesService {
         throw new Error(`Sales Order with ID ${id} not found.`);
       }
 
-      return order;
+      const productIds = Array.from(
+        new Set(order.salesorderline.map((line: any) => line.product_id).filter(Boolean))
+      ) as string[];
+      const productDefaults = await SalesService.getOrderProductDefaults(prisma, productIds);
+
+      return {
+        ...order,
+        salesorderline: order.salesorderline.map((line: any) => {
+          const defaults = productDefaults.get(line.product_id);
+          const grnSalePrice = defaults?.sale_price && Number(defaults.sale_price) > 0
+            ? Number(defaults.sale_price)
+            : null;
+
+          return {
+            ...line,
+            sale_price: grnSalePrice ?? (line.sale_price !== null && line.sale_price !== undefined ? Number(line.sale_price) : line.sale_price),
+            unit_price: grnSalePrice ?? (line.unit_price !== null && line.unit_price !== undefined ? Number(line.unit_price) : line.unit_price)
+          };
+        })
+      };
     } catch (error: any) {
       console.error("Error in getSalesOrderById:", error.message);
       throw error;

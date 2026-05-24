@@ -180,7 +180,7 @@ export default function TaxManagement() {
 
   return (
     <div className="text-slate-300 p-4 md:p-12 font-sans selection:bg-emerald-500/30">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
       
       <div className="max-w-7xl mx-auto space-y-12">
         {/* HEADER */}

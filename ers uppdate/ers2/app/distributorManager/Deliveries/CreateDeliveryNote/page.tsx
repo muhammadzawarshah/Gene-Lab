@@ -15,6 +15,7 @@ export default function CreateDeliveryNote() {
   const [saleOrders, setSaleOrders] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
   const [selectedSO, setSelectedSO] = useState<any>(null);
 
   const [isSoOpen, setIsSoOpen] = useState(false);
@@ -101,6 +102,31 @@ export default function CreateDeliveryNote() {
     if (authToken) fetchOrders();
   }, [authToken]);
 
+  useEffect(() => {
+    const fetchWarehouseStock = async () => {
+      if (!formData.warehouse_id || !authToken) {
+        setWarehouseStock({});
+        return;
+      }
+
+      try {
+        const stockRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/stock/warehouse/${formData.warehouse_id}`, {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+
+        const nextStock = (stockRes.data.data || []).reduce((acc: Record<string, number>, item: any) => {
+          acc[item.product_id] = Number(item.available ?? item.on_hand ?? 0);
+          return acc;
+        }, {});
+        setWarehouseStock(nextStock);
+      } catch {
+        setWarehouseStock({});
+      }
+    };
+
+    fetchWarehouseStock();
+  }, [authToken, formData.warehouse_id]);
+
   const handleSOSelection = async (so: any) => {
     setSelectedSO(so);
     setIsSoOpen(false);
@@ -142,7 +168,7 @@ export default function CreateDeliveryNote() {
       setFormData({
         distributorName: backendData.party?.name || '',
         orderDate: backendData.order_date ? backendData.order_date.split('T')[0] : '',
-        status: backendData.status?.toLowerCase() || 'pending',
+        status: 'pending',
         remarks: '',
         warehouse_id: '',
         transportCharges: 0,
@@ -178,20 +204,43 @@ export default function CreateDeliveryNote() {
     });
   };
 
+  const getBatchGrnSalePrice = (productId: string, batchId: string) => {
+    if (!batchId) return null;
+
+    const batch = batches.find((entry: any) => String(entry.batch_id) === String(batchId));
+    const grnLine = batch?.grnline?.find((line: any) =>
+      line.product_id === productId &&
+      line.sale_price !== null &&
+      line.sale_price !== undefined
+    );
+
+    const parsed = Number(grnLine?.sale_price);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
   const handleBatchChange = (index: number, value: string) => {
     setFormData((prev) => {
       const updatedProducts = [...prev.products];
+      const row = updatedProducts[index];
+      const grnSalePrice = getBatchGrnSalePrice(row.product_id, value);
+
       updatedProducts[index] = {
-        ...updatedProducts[index],
-        selected_batch_id: value
+        ...row,
+        selected_batch_id: value,
+        sale_price: grnSalePrice ?? row.sale_price
       };
       return { ...prev, products: updatedProducts };
     });
   };
 
   const getProductBatches = (productId: string) => {
+    const selectedWarehouse = warehouses.find((wh: any) => String(wh.warehouse_id) === String(formData.warehouse_id));
+    const selectedWarehouseLocation = selectedWarehouse?.location;
+
     return batches.filter((batch) =>
       batch.status === 'ACTIVE' &&
+      (!formData.warehouse_id || !selectedWarehouseLocation || !batch.location_id || Number(batch.location_id) === Number(selectedWarehouseLocation)) &&
+      (!formData.warehouse_id || Number(warehouseStock[productId] || 0) > 0) &&
       Array.isArray(batch.batchitem) &&
       batch.batchitem.some((item: any) =>
         item.product_id === productId && Number(item.available_quantity || 0) > 0
@@ -211,6 +260,15 @@ export default function CreateDeliveryNote() {
     if (!formData.warehouse_id) return toast.error("Pehle warehouse select karein");
     if (emptyLines) return toast.error("Kam az kam ek line ki delivery quantity honi chahiye.");
 
+    const insufficientLine = formData.products.find((item) =>
+      Number(item.quantity || 0) > 0 &&
+      Number(warehouseStock[item.product_id] || 0) < Number(item.quantity || 0)
+    );
+
+    if (insufficientLine) {
+      return toast.error(`${insufficientLine.productName} ka selected warehouse stock kam hai. Available: ${warehouseStock[insufficientLine.product_id] || 0}`);
+    }
+
     const tId = toast.loading("Saving & Dispatching...");
     try {
       await axios.post(
@@ -218,6 +276,7 @@ export default function CreateDeliveryNote() {
         {
           orderId: selectedSO.so_id,
           ...formData,
+          status: 'pending',
           products: formData.products.map((item) => ({
             so_line_id: item.so_line_id,
             product_id: item.product_id,
@@ -242,7 +301,7 @@ export default function CreateDeliveryNote() {
 
   return (
     <div className="text-slate-300 p-4 md:p-8 font-sans">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
       <div className="max-w-[1400px] mx-auto">
         <header className="flex items-center gap-6 mb-12 border-b border-white/5 pb-10">
           <div className="bg-emerald-600 p-4 rounded-2xl"><ShoppingBag className="text-white" size={28} /></div>

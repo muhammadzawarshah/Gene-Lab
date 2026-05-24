@@ -6,6 +6,14 @@ const batchInclude = {
     include: {
       product: { select: { product_id: true, name: true, sku_code: true } }
     }
+  },
+  grnline: {
+    orderBy: { grn_line_id: 'desc' as const },
+    select: {
+      product_id: true,
+      sale_price: true,
+      purchase_price: true
+    }
   }
 };
 

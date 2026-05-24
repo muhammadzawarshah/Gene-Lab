@@ -95,6 +95,13 @@ export default function CreatePayment() {
     else setInvoiceData(null);
   }, [selectedInvoiceId, fetchInvoiceDetails]);
 
+  const outstandingAmount = Number(invoiceData?.balanceDue ?? invoiceData?.balanceAmount ?? 0);
+  const enteredPaymentAmount = Number(paidAmount || 0);
+  const remainingAfterPayment = Math.max(outstandingAmount - enteredPaymentAmount, 0);
+  const paymentAmountPlaceholder = outstandingAmount > 0
+    ? `Remaining: PKR ${outstandingAmount.toLocaleString()}`
+    : "0.00";
+
   // 3. SUBMIT SUPPLIER PAYMENT
   const handlePayment = async () => {
     const amount = Number(paidAmount);
@@ -130,7 +137,7 @@ export default function CreatePayment() {
 
   return (
     <div className="text-white p-6 md:p-12 pb-32 font-sans">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* PAGE HEADER */}
       <div className="mb-12 border-l-4 border-emerald-500 pl-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -294,7 +301,7 @@ export default function CreatePayment() {
                 <div className="flex justify-between items-center pb-6 border-b border-white/10">
                   <span className="text-[11px] font-black text-slate-400 uppercase">Net Outstanding:</span>
                   <span className="text-3xl font-black text-rose-500 italic tracking-tighter">
-                    PKR {Number(invoiceData.balanceDue ?? invoiceData.balanceAmount ?? 0).toLocaleString()}
+                    PKR {outstandingAmount.toLocaleString()}
                   </span>
                 </div>
 
@@ -309,9 +316,20 @@ export default function CreatePayment() {
                       type="number"
                       value={paidAmount}
                       onChange={(e) => setPaidAmount(e.target.value === "" ? "" : Math.abs(Number(e.target.value)))}
-                      placeholder="0.00"
+                      placeholder={paymentAmountPlaceholder}
+                      max={outstandingAmount}
                       className="w-full bg-slate-950 border-2 border-white/5 rounded-[2rem] py-6 pl-16 pr-6 text-3xl font-black text-white outline-none focus:border-emerald-500 transition-all"
                     />
+                  </div>
+                  <div className="mt-4 rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Remaining After This Payment
+                      </span>
+                      <span className="text-lg font-black text-emerald-400 font-mono">
+                        PKR {remainingAfterPayment.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Remarks */}

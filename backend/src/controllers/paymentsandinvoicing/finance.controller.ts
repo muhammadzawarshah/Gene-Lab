@@ -175,3 +175,11 @@ export const getPartyLedger = async (req: Request, res: Response, next: NextFunc
   } catch (err) { next(err); }
 };
 
+export const getCustomerReceivableLedger = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const partyId = req.params['partyId'] as string;
+    const ledger = await FinanceService.getCustomerReceivableLedgerDetails(partyId);
+    res.status(200).json(ledger);
+  } catch (err) { next(err); }
+};
+

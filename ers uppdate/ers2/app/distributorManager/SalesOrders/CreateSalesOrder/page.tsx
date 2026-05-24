@@ -8,6 +8,7 @@ import {
   Trash2, Layers, ChevronDown, Loader2,
   Calculator, Wallet, ShieldCheck, UserCircle2, AlertTriangle
 } from 'lucide-react';
+import { DataRibbon, PremiumHero, PremiumPage, StatusPill } from '@/components/ui/premium';
 
 interface Customer { party_id: string; name: string; }
 interface Category { product_category_id: string; category: string; }
@@ -26,7 +27,13 @@ interface SOItem {
   amount: number;
 }
 
-type DiscountType = '' | 'tp' | 'dd' | 'other';
+type DiscountType = 'tp' | 'dd' | 'other';
+
+const discountOptions: { value: DiscountType; label: string }[] = [
+  { value: 'tp', label: 'TP Discount' },
+  { value: 'dd', label: 'DD Discount' },
+  { value: 'other', label: 'Other Discount' },
+];
 
 const emptyRow = (): SOItem => ({
   category_id: '', product_id: '',
@@ -40,8 +47,12 @@ export default function CreateSalesOrder() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [productsMap, setProductsMap] = useState<Record<string, Product[]>>({});
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
-  const [discountType, setDiscountType] = useState<DiscountType>('');
-  const [discountPercent, setDiscountPercent] = useState('');
+  const [selectedDiscounts, setSelectedDiscounts] = useState<DiscountType[]>([]);
+  const [discountValues, setDiscountValues] = useState<Record<DiscountType, string>>({
+    tp: '',
+    dd: '',
+    other: '',
+  });
 
   const currentUserId = Cookies.get('userId') || 'ADMIN_USER';
   const token = Cookies.get('auth_token');
@@ -144,12 +155,32 @@ export default function CreateSalesOrder() {
   };
 
   const grossTotal = useMemo(() => rows.reduce((s, r) => s + (r.amount || 0), 0), [rows]);
-  const safeDiscountPercent = useMemo(() => {
-    if (!discountType) return 0;
-    return Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
-  }, [discountPercent, discountType]);
-  const discountAmount = useMemo(() => (grossTotal * safeDiscountPercent) / 100, [grossTotal, safeDiscountPercent]);
+  const discountPercents = useMemo(() => ({
+    tp: Math.min(Math.max(Number(discountValues.tp) || 0, 0), 100),
+    dd: Math.min(Math.max(Number(discountValues.dd) || 0, 0), 100),
+    other: Math.min(Math.max(Number(discountValues.other) || 0, 0), 100),
+  }), [discountValues]);
+  const totalDiscountPercent = useMemo(
+    () => Math.min(selectedDiscounts.reduce((sum, type) => sum + discountPercents[type], 0), 100),
+    [discountPercents, selectedDiscounts]
+  );
+  const discountAmount = useMemo(() => (grossTotal * totalDiscountPercent) / 100, [grossTotal, totalDiscountPercent]);
   const netTotal = useMemo(() => Math.max(grossTotal - discountAmount, 0), [discountAmount, grossTotal]);
+
+  const addDiscount = (type: string) => {
+    if (!type) return;
+    const nextType = type as DiscountType;
+    setSelectedDiscounts((prev) => prev.includes(nextType) ? prev : [...prev, nextType]);
+  };
+
+  const updateDiscountValue = (type: DiscountType, value: string) => {
+    setDiscountValues((prev) => ({ ...prev, [type]: value }));
+  };
+
+  const removeDiscount = (type: DiscountType) => {
+    setSelectedDiscounts((prev) => prev.filter((item) => item !== type));
+    setDiscountValues((prev) => ({ ...prev, [type]: '' }));
+  };
   const stockIssues = useMemo(() => {
     return rows
       .filter((row) => row.product_id && Number(row.total_unit) > Number(stockMap[row.product_id] || 0))
@@ -182,17 +213,17 @@ export default function CreateSalesOrder() {
           taxId: null,
           taxAmount: 0,
           netTotal,
-          tpDiscount: discountType === 'tp' ? safeDiscountPercent : 0,
-          ddDiscount: discountType === 'dd' ? safeDiscountPercent : 0,
-          otherDiscount: discountType === 'other' ? safeDiscountPercent : 0,
+          tpDiscount: selectedDiscounts.includes('tp') ? discountPercents.tp : 0,
+          ddDiscount: selectedDiscounts.includes('dd') ? discountPercents.dd : 0,
+          otherDiscount: selectedDiscounts.includes('other') ? discountPercents.other : 0,
         }
       }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast.success("Sales order submitted", { icon: <ShieldCheck className="text-emerald-500" /> });
       setSelectedPartyId('');
       setRows([emptyRow(), emptyRow(), emptyRow()]);
-      setDiscountType('');
-      setDiscountPercent('');
+      setSelectedDiscounts([]);
+      setDiscountValues({ tp: '', dd: '', other: '' });
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Submission failed");
     } finally {
@@ -204,25 +235,33 @@ export default function CreateSalesOrder() {
   const inpCls = "w-full bg-[#0f172a] border border-slate-800 rounded-xl py-3 px-3 text-white focus:border-blue-500 outline-none transition-all text-xs font-medium appearance-none";
 
   return (
-    <div className="max-w-[1600px] mx-auto p-4 md:p-10 pb-24 selection:bg-blue-600/30">
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage className="selection:bg-blue-600/30">
+      <Toaster position="top-right" theme="light" richColors />
 
-      <div className="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-8 border-l-8 border-blue-600 pl-6">
-        <div className="flex-1">
-          <h1 className="text-6xl font-black text-white uppercase tracking-tighter italic leading-none">
-            Order <span className="text-blue-600">Forge</span>
-          </h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.4em] mt-4 flex items-center gap-2 italic">
-            <Layers size={14} className="text-blue-500" /> AUTH_ID: {currentUserId}
-          </p>
-        </div>
+      <PremiumHero
+        eyebrow="Sales Order Studio"
+        icon={Layers}
+        title={<>Order <span className="text-blue-600">Forge</span></>}
+        description="Create distributor sales orders with live stock visibility, controlled discount selection, and real-time order totals."
+        meta={<StatusPill tone="blue">AUTH ID: {currentUserId}</StatusPill>}
+      >
+        <DataRibbon
+          items={[
+            { label: "Gross Total", value: `PKR ${grossTotal.toLocaleString()}` },
+            { label: "Discount", value: `${totalDiscountPercent}%` },
+            { label: "Net Total", value: `PKR ${netTotal.toLocaleString()}` },
+            { label: "Lines", value: rows.filter((row) => row.product_id).length },
+          ]}
+        />
+      </PremiumHero>
 
-        <div className="w-full lg:w-[560px]">
-          <div className="relative bg-[#020617] rounded-2xl border border-white/10 p-4">
-            <label className="text-[9px] font-black text-blue-500 uppercase mb-2 block tracking-widest italic">Target Customer Account</label>
+      <div className="app-panel mt-6 rounded-[1.75rem] p-4 md:p-5">
+        <div className="w-full">
+          <div className="relative">
+            <label className="mb-2 block text-[9px] font-black uppercase tracking-widest text-blue-500">Target Customer Account</label>
             <div className="relative">
               <select
-                className="w-full bg-slate-900 border-none rounded-xl py-4 pl-12 pr-10 text-white text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+                className="w-full cursor-pointer appearance-none rounded-[1.15rem] border border-white/10 bg-white/[0.62] py-4 pl-12 pr-10 text-sm font-bold text-white outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                 value={selectedPartyId}
                 onChange={e => setSelectedPartyId(e.target.value)}
               >
@@ -254,7 +293,7 @@ export default function CreateSalesOrder() {
         </div>
       )}
 
-      <form onSubmit={handleFinalize} className="bg-[#020617] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
+      <form onSubmit={handleFinalize} className="app-panel mt-6 overflow-hidden rounded-[1.75rem] border border-white/10 shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse min-w-[1100px]">
             <thead>
@@ -330,43 +369,29 @@ export default function CreateSalesOrder() {
           </table>
         </div>
 
-        <div className="p-10 bg-[#020617] border-t border-white/5 flex flex-col gap-6">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_180px_180px]">
+        <div className="flex flex-col gap-6 border-t border-white/5 bg-white/[0.45] p-5 md:p-8">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_180px]">
             <div className="relative">
               <label className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-500">
-                Discount Type
+                Add Discount
               </label>
               <select
                 className={inpCls}
-                value={discountType}
-                onChange={(e) => {
-                  setDiscountType(e.target.value as DiscountType);
-                  if (!e.target.value) setDiscountPercent('');
-                }}
+                value=""
+                onChange={(e) => addDiscount(e.target.value)}
               >
-                <option value="">No Discount</option>
-                <option value="tp">TP Discount</option>
-                <option value="dd">DD Discount</option>
-                <option value="other">Other Discount</option>
+                <option value="">Select Discount...</option>
+                {discountOptions.map((option) => (
+                  <option
+                    key={option.value}
+                    value={option.value}
+                    disabled={selectedDiscounts.includes(option.value)}
+                  >
+                    {option.label}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="pointer-events-none absolute bottom-3.5 right-4 text-slate-500" size={16} />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-500">
-                Discount %
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                disabled={!discountType}
-                className={`${inpCls} text-right font-mono disabled:opacity-40`}
-                value={discountPercent}
-                onChange={(e) => setDiscountPercent(e.target.value)}
-                placeholder="0.00"
-              />
             </div>
 
             <div className="flex items-end">
@@ -376,6 +401,41 @@ export default function CreateSalesOrder() {
               </div>
             </div>
           </div>
+
+          {selectedDiscounts.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {selectedDiscounts.map((type) => {
+                const option = discountOptions.find((item) => item.value === type);
+
+                return (
+                  <div key={type} className="rounded-2xl border border-white/5 bg-white/[0.025] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                        {option?.label}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeDiscount(type)}
+                        className="rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest text-rose-400 transition-all hover:bg-rose-500/10"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className={`${inpCls} text-right font-mono`}
+                      value={discountValues[type]}
+                      onChange={(e) => updateDiscountValue(type, e.target.value)}
+                      placeholder="0.00 %"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex flex-wrap items-center gap-4">
@@ -397,8 +457,8 @@ export default function CreateSalesOrder() {
           <div className="flex gap-4 w-full md:w-auto">
             <button type="button" onClick={() => {
               setRows([emptyRow(), emptyRow(), emptyRow()]);
-              setDiscountType('');
-              setDiscountPercent('');
+              setSelectedDiscounts([]);
+              setDiscountValues({ tp: '', dd: '', other: '' });
             }}
               className="flex-1 md:flex-none bg-white/5 text-slate-500 font-black px-10 py-5 rounded-2xl uppercase text-[10px] tracking-widest border border-white/5 hover:bg-rose-500/10 hover:text-rose-500 transition-all">
               Clear Form
@@ -411,6 +471,6 @@ export default function CreateSalesOrder() {
           </div>
         </div>
       </form>
-    </div>
+    </PremiumPage>
   );
 }

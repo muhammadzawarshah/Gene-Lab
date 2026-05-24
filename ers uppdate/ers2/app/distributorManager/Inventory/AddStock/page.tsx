@@ -145,7 +145,7 @@ export default function AddStockGRN() {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 pb-32 p-4 text-slate-200">
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme="light" position="top-right" richColors />
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

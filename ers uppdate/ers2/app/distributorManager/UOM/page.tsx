@@ -167,7 +167,7 @@ export default function UOMManagement() {
 
   return (
     <div className="text-slate-300 p-4 md:p-12 font-sans selection:bg-violet-500/30">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
 
       <div className="max-w-7xl mx-auto space-y-12">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 border-b border-white/5 pb-10">

@@ -91,7 +91,7 @@ export default function InvoicesPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-10 text-slate-300 font-sans bg-black">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">

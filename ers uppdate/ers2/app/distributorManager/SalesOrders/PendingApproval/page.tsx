@@ -8,6 +8,8 @@ import {
   Edit3, X, Search, Save, User, Eye, Info, Hash, Calendar, DollarSign, Tag, ArrowRightLeft, ShoppingBag
 } from 'lucide-react';
 import { InvoiceComponent } from '@/components/layout/InvoiceComponent';
+import { DataRibbon, EmptyState, PremiumHero, PremiumPage, SearchPanel, StatusPill } from '@/components/ui/premium';
+import { printElementById } from '@/lib/printElement';
 
 // --- TYPES ---
 interface OrderItem {
@@ -25,6 +27,12 @@ interface Order {
   salesorderline: OrderItem[];
   status: string;
   total_amount: any;
+  tp_discount?: any;
+  dd_discount?: any;
+  other_discount?: any;
+  tpDiscount?: any;
+  ddDiscount?: any;
+  otherDiscount?: any;
   order_date: string;
   party_id_customer: string;
 }
@@ -38,16 +46,12 @@ export default function SaleOrderManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [reportDiscountMode, setReportDiscountMode] = useState<'tp' | 'tp_dd' | 'all' | null>(null);
 
   // --- FORM STATE ---
   const [editForm, setEditForm] = useState<{
     so_id: number; 
-    so_line_id: number;
-    product_id: string;
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    line_total: number;
+    total_evaluation: number;
     status: string; 
   } | null>(null);
 
@@ -57,6 +61,18 @@ export default function SaleOrderManagement() {
   const safeNum = (val: any): number => {
     const n = parseFloat(val);
     return isNaN(n) ? 0 : n;
+  };
+
+  const getOrderEvaluation = (order: Order): number => {
+    const orderTotal = safeNum(order.total_amount);
+    if (orderTotal > 0) return orderTotal;
+
+    return order.salesorderline.reduce((sum, item) => {
+      const lineTotal = safeNum(item.line_total);
+      if (lineTotal > 0) return sum + lineTotal;
+
+      return sum + (safeNum(item.quantity) * safeNum(item.unit_price));
+    }, 0);
   };
 
   // --- FETCH DATA ---
@@ -79,15 +95,10 @@ export default function SaleOrderManagement() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // --- OPEN EDIT MODAL ---
-  const openEditModal = (order: Order, item: OrderItem) => {
+  const openEditModal = (order: Order) => {
     setEditForm({
       so_id: order.so_id, 
-      so_line_id: item.so_line_id,
-      product_id: item.product_id,
-      product_name: item.product?.name,
-      quantity: safeNum(item.quantity),
-      unit_price: safeNum(item.unit_price),
-      line_total: safeNum(item.line_total),
+      total_evaluation: getOrderEvaluation(order),
       status: order.status 
     });
     setIsEditOpen(true);
@@ -101,11 +112,6 @@ export default function SaleOrderManagement() {
     try {
       const payload = {
         so_id: editForm.so_id,
-        so_line_id: editForm.so_line_id,
-        product_id: editForm.product_id,
-        quantity: editForm.quantity,
-        unit_price: editForm.unit_price,
-        line_total: editForm.line_total,
         status: editForm.status 
       };
 
@@ -133,44 +139,56 @@ export default function SaleOrderManagement() {
   const tdStyle = "p-4 text-xs font-medium text-white border-b border-white/5";
 
   return (
-    <div className="text-white p-6 font-sans">
-      <Toaster position="top-right" theme="dark" richColors />
+    <PremiumPage>
+      <Toaster position="top-right" theme="light" richColors />
 
       {/* HEADER */}
-      <div className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex items-center gap-6">
-          <div className="h-14 w-1.5 bg-amber-500 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
-          <h1 className="text-4xl font-black uppercase italic tracking-tighter">Sale <span className="text-amber-500 text-5xl">Portal</span></h1>
-        </div>
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-          <input 
-            placeholder="Search by Customer or Product..." 
-            className="w-full bg-slate-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm outline-none focus:border-amber-500 transition-all"
-            value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
+      <PremiumHero
+        eyebrow="Sales Order Review"
+        icon={ShoppingBag}
+        title={<>Approval <span className="text-amber-500">Queue</span></>}
+        description="Review pending distributor orders, inspect order details, and update approval status without changing the existing workflow."
+        meta={<StatusPill tone="amber">{filteredOrders.length} Pending</StatusPill>}
+      >
+        <DataRibbon
+          items={[
+            { label: "Orders", value: filteredOrders.length },
+            { label: "Products", value: filteredOrders.reduce((sum, order) => sum + order.salesorderline.length, 0) },
+            { label: "Total Qty", value: filteredOrders.reduce((sum, order) => sum + order.salesorderline.reduce((inner, item) => inner + safeNum(item.quantity), 0), 0).toLocaleString() },
+            { label: "Evaluation", value: `PKR ${filteredOrders.reduce((sum, order) => sum + getOrderEvaluation(order), 0).toLocaleString()}` },
+          ]}
+        />
+      </PremiumHero>
+
+      <SearchPanel
+        className="mt-6"
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search by customer or product..."
+      />
 
       {/* TABLE WITH ALL COLUMNS */}
-      <div className="bg-slate-900/30 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-md shadow-2xl">
+      <div className="app-panel mt-6 overflow-hidden rounded-[1.75rem] border border-white/10 shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-white/[0.02]">
                 <th className="p-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/10">Ref#</th>
                 <th className={thStyle}>Customer</th>
-                <th className={thStyle}>Product</th>
+                <th className={thStyle + " text-center"}>Products</th>
                 <th className={thStyle}>Status</th> 
                 <th className={thStyle + " text-center"}>Qty</th>
-                <th className={thStyle + " text-right"}>Rate</th>
                 <th className={thStyle + " text-right"}>Total Amount</th>
                 <th className="p-4 text-center text-[10px] font-black text-slate-500 uppercase border-b border-white/10">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.flatMap((order) => order.salesorderline.map((item, idx) => (
-                <tr key={`${order.so_id}-${idx}`} className="hover:bg-amber-500/[0.02] transition-colors group">
+              {filteredOrders.map((order) => {
+                const totalQty = order.salesorderline.reduce((sum, item) => sum + safeNum(item.quantity), 0);
+                const totalEvaluation = getOrderEvaluation(order);
+
+                return (
+                <tr key={order.so_id} className="group transition-colors hover:bg-amber-500/[0.04]">
                   <td className="p-4 text-center text-amber-500/50 font-mono text-xs font-bold italic">#{order.so_id}</td>
                   <td className={tdStyle}>
                     <div className="flex items-center gap-2">
@@ -178,49 +196,61 @@ export default function SaleOrderManagement() {
                       {order.party?.name}
                     </div>
                   </td>
-                  <td className={tdStyle}>
-                    <div className="flex items-center gap-2">
-                      <ShoppingBag size={12} className="text-slate-500" />
-                      {item.product?.name}
+                  <td className={tdStyle + " text-center"}>
+                    <div className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-[11px] font-black text-amber-400">
+                      <ShoppingBag size={13} className="text-slate-500" />
+                      {order.salesorderline.length} Products
                     </div>
                   </td>
                   <td className={tdStyle}>
-                    <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-lg text-[9px] font-black uppercase tracking-tighter">
-                        {order.status}
-                    </span>
+                    <StatusPill tone="amber">{order.status}</StatusPill>
                   </td>
-                  <td className={tdStyle + " text-center font-bold"}>{item.quantity}</td>
-                  <td className={tdStyle + " text-right font-mono text-blue-400"}>{safeNum(item.unit_price).toLocaleString()}</td>
-                  <td className={tdStyle + " text-right font-black text-emerald-400 italic"}>PKR {safeNum(item.line_total).toLocaleString()}</td>
+                  <td className={tdStyle + " text-center font-bold"}>{totalQty.toLocaleString()}</td>
+                  <td className={tdStyle + " text-right font-black text-emerald-400 italic"}>PKR {totalEvaluation.toLocaleString()}</td>
                   <td className="p-4 text-center">
                     <div className="flex justify-center gap-3">
-                      <button onClick={() => openEditModal(order, item)} className="p-2.5 bg-white/5 hover:bg-blue-600 text-slate-400 hover:text-white rounded-xl transition-all active:scale-90 border border-white/5"><Edit3 size={15}/></button>
-                      <button onClick={() => { setSelectedOrder(order); setIsViewOpen(true); }} className="p-2.5 bg-white/5 hover:bg-amber-500 text-slate-400 hover:text-black rounded-xl transition-all active:scale-90 border border-white/5"><Eye size={15}/></button>
+                      <button onClick={() => openEditModal(order)} className="p-2.5 bg-white/5 hover:bg-blue-600 text-slate-400 hover:text-white rounded-xl transition-all active:scale-90 border border-white/5"><Edit3 size={15}/></button>
+                      <button onClick={() => { setSelectedOrder(order); setReportDiscountMode(null); setIsViewOpen(true); }} className="p-2.5 bg-white/5 hover:bg-amber-500 text-slate-400 hover:text-black rounded-xl transition-all active:scale-90 border border-white/5"><Eye size={15}/></button>
                     </div>
                   </td>
                 </tr>
-              )))}
+                );
+              })}
             </tbody>
           </table>
+          {filteredOrders.length === 0 && (
+            <EmptyState icon={ShoppingBag} title="No pending orders" description="Pending approval queue is clear for the current filters." />
+          )}
         </div>
       </div>
 
       {/* EDIT MODAL */}
       {isEditOpen && editForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0f172a] border border-white/10 w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden shadow-amber-500/5">
-            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="app-panel w-full max-w-lg overflow-hidden rounded-[1.75rem] border border-white/10 shadow-2xl shadow-amber-500/5">
+            <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.45] p-6">
               <div className="flex items-center gap-4">
                  <div className="w-12 h-12 bg-amber-500/20 rounded-2xl flex items-center justify-center border border-amber-500/20">
                     <ArrowRightLeft className="text-amber-500" size={20} />
                  </div>
-                 <h3 className="text-xl font-black italic uppercase">Modify <span className="text-amber-500 underline underline-offset-4 decoration-white/10">Order Line</span></h3>
+                 <h3 className="text-xl font-black tracking-tight text-white">Modify <span className="text-amber-500">Sale Order</span></h3>
               </div>
               <button onClick={() => setIsEditOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-slate-500 hover:text-white transition-all"><X size={20}/></button>
             </div>
             
-            <div className="p-10 space-y-8">
-              <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-8 p-6 md:p-8">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">SO Number</label>
+                    <p className="font-mono text-2xl font-black italic text-amber-400">SO-{editForm.so_id}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Total Evaluation</label>
+                    <p className="font-mono text-2xl font-black italic text-emerald-400">PKR {safeNum(editForm.total_evaluation).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Order Status</label>
                     <select 
@@ -235,24 +265,6 @@ export default function SaleOrderManagement() {
                         {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                     </select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Quantity</label>
-                    <input type="number" className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-amber-500 font-mono text-lg"
-                    value={editForm.quantity} onChange={(e) => { const q = safeNum(e.target.value); setEditForm({...editForm, quantity: q, line_total: q * editForm.unit_price}); }} />
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Unit Rate</label>
-                    <input type="number" className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-amber-500 font-mono text-lg"
-                    value={editForm.unit_price} onChange={(e) => { const r = safeNum(e.target.value); setEditForm({...editForm, unit_price: r, line_total: editForm.quantity * r}); }} />
-                </div>
-              </div>
-
-              <div className="p-8 bg-gradient-to-r from-amber-500/10 to-transparent rounded-[2rem] border border-amber-500/20 flex justify-between items-center">
-                <span className="text-[11px] font-black text-amber-500 uppercase flex items-center gap-2"><DollarSign size={14}/> Final Value</span>
-                <span className="font-mono font-bold text-3xl text-white italic">PKR {safeNum(editForm.line_total).toLocaleString()}</span>
               </div>
             </div>
 
@@ -273,10 +285,11 @@ export default function SaleOrderManagement() {
       
       {/* Modal Toolbar (Sticky) */}
       <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
-        <h3 className="text-white font-black italic uppercase ml-4">Invoice Preview</h3>
+        <h3 className="text-white font-black italic uppercase ml-4">Select Report Discount</h3>
         <div className="flex gap-4">
           <button 
-            onClick={() => window.print()} 
+            onClick={() => printElementById("printable-area", "Sales Order Report")} 
+            disabled={!reportDiscountMode}
             className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
           >
             Print PDF
@@ -293,15 +306,33 @@ export default function SaleOrderManagement() {
       {/* Invoice Content Area */}
       <div className="p-6 bg-gray-100 rounded-b-[2rem]">
          <div id="printable-area">
-            {/* YAHAN HUM COMPONENT CALL KAR RAHE HAIN */}
-            <InvoiceComponent order={selectedOrder} />
+            {!reportDiscountMode ? (
+              <div className="grid gap-4 p-8 md:grid-cols-3">
+                {[
+                  { key: 'tp' as const, title: 'Report With TP', desc: 'Sirf TP discount apply hoga.' },
+                  { key: 'tp_dd' as const, title: 'Report With TP + DD', desc: 'TP aur DD discount apply honge.' },
+                  { key: 'all' as const, title: 'Report With TP + DD + Other', desc: 'Teeno discounts apply honge.' },
+                ].map((option) => (
+                  <button
+                    key={option.key}
+                    onClick={() => setReportDiscountMode(option.key)}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:border-amber-400 hover:shadow-lg"
+                  >
+                    <p className="text-sm font-black uppercase text-slate-950">{option.title}</p>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">{option.desc}</p>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <InvoiceComponent order={selectedOrder} discountMode={reportDiscountMode} />
+            )}
          </div>
       </div>
       
     </div>
   </div>
 )}
-    </div>
+    </PremiumPage>
   );
 }
 

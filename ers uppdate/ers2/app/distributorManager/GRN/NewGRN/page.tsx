@@ -169,11 +169,40 @@ export default function NewGRNPage() {
   const thStyle = "px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 bg-black/20 whitespace-nowrap";
   const inputStyle = "bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2 text-[11px] font-bold text-blue-400 outline-none focus:border-blue-500 w-full transition-all";
   const footerInputStyle = "bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:border-blue-500 w-full";
-  const filteredPOs = purchaseOrders.filter(p => p.po_id?.toString().includes(poSearch));
+  const isPOAvailableForGRN = (po: any) => {
+    const statusText = [
+      po.status,
+      po.po_status,
+      po.grn_status,
+      po.receive_status,
+      po.receiving_status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const completedStatuses = [
+      "complete",
+      "completed",
+      "closed",
+      "received",
+      "fully received",
+      "full received",
+      "grn completed",
+      "invoiced",
+    ];
+
+    return !completedStatuses.some((status) => statusText.includes(status));
+  };
+
+  const filteredPOs = purchaseOrders.filter((po) => {
+    const matchesSearch = po.po_id?.toString().includes(poSearch);
+    return matchesSearch && isPOAvailableForGRN(po);
+  });
 
   return (
     <div className="text-slate-300 p-6">
-      <Toaster richColors theme="dark" position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
       <div className="max-w-[1600px] mx-auto">
 
         <header className="flex items-center gap-4 mb-8 border-b border-white/5 pb-8">
@@ -202,6 +231,11 @@ export default function NewGRNPage() {
                   {filteredPOs.map((po) => (
                     <div key={po.po_id} onClick={() => handlePOSelection(po)} className="px-6 py-4 hover:bg-blue-600 cursor-pointer text-sm font-bold border-b border-white/5 text-slate-200">
                       PO #{po.po_id}
+                      {(po.status || po.po_status || po.grn_status || po.receive_status || po.receiving_status) && (
+                        <span className="ml-2 text-[10px] font-black uppercase text-blue-500">
+                          {po.status || po.po_status || po.grn_status || po.receive_status || po.receiving_status}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
