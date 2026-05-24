@@ -65,13 +65,19 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
       });
     };
 
-    if ("requestIdleCallback" in window) {
-      const idleId = window.requestIdleCallback(prefetchRoutes, { timeout: 2500 });
-      return () => window.cancelIdleCallback(idleId);
+    const idleWindow = window as Window &
+      typeof globalThis & {
+        requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+        cancelIdleCallback?: (handle: number) => void;
+      };
+
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const idleId = idleWindow.requestIdleCallback(prefetchRoutes, { timeout: 2500 });
+      return () => idleWindow.cancelIdleCallback?.(idleId);
     }
 
-    const timeoutId = window.setTimeout(prefetchRoutes, 1200);
-    return () => window.clearTimeout(timeoutId);
+    const timeoutId = globalThis.setTimeout(prefetchRoutes, 1200);
+    return () => globalThis.clearTimeout(timeoutId);
   }, [menuItems, router]);
 
   const toggleSection = (id: string) => setOpenSection(openSection === id ? null : id);
