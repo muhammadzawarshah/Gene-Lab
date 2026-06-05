@@ -19,6 +19,9 @@ interface DeliveryNoteData {
     delv_date: string;
     status: string;
     discount?: string;
+    tp_discount?: any;
+    dd_discount?: any;
+    other_discount?: any;
     transportcharges?: string;
     nettotal?: string;
     salesorder?: {
@@ -30,9 +33,10 @@ interface DeliveryNoteData {
 
 interface DeliveryNoteReportProps {
     data: DeliveryNoteData | null;
+    discountMode?: 'tp' | 'tp_dd' | 'all';
 }
 
-export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) => {
+export const DeliveryNoteReportComponent = ({ data, discountMode = 'all' }: DeliveryNoteReportProps) => {
     if (!data) return <div className="p-10 text-center text-gray-500">No Delivery Note Selected</div>;
 
     const formatDate = (dateStr?: string | null) => {
@@ -46,6 +50,37 @@ export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) =
         const num = parseFloat(amount);
         return isNaN(num) ? "0.00" : num.toLocaleString(undefined, { minimumFractionDigits: 2 });
     };
+
+    const toNumber = (val: any) => { const n = parseFloat(val); return isNaN(n) ? 0 : n; };
+
+    const grossSubtotal = (data.deliverynoteline || []).reduce(
+        (sum, item) => sum + (toNumber(item.delivered_qty) * toNumber(item.sale_price)), 0
+    );
+    const transport     = toNumber(data.transportcharges);
+    const tpPercent     = toNumber(data.tp_discount);
+    const ddPercent     = toNumber(data.dd_discount);
+    const otherPercent  = toNumber(data.other_discount);
+    const hasIndividual = tpPercent > 0 || ddPercent > 0 || otherPercent > 0;
+
+    const allRows = [
+        { label: 'TP',    percent: tpPercent,    amount: (grossSubtotal * tpPercent) / 100 },
+        { label: 'DD',    percent: ddPercent,    amount: (grossSubtotal * ddPercent) / 100 },
+        { label: 'Other', percent: otherPercent, amount: (grossSubtotal * otherPercent) / 100 },
+    ];
+
+    const discountRows = hasIndividual
+        ? allRows.filter((row) => {
+              if (row.percent <= 0) return false;
+              if (discountMode === 'tp')    return row.label === 'TP';
+              if (discountMode === 'tp_dd') return row.label === 'TP' || row.label === 'DD';
+              return true;
+          })
+        : [];
+
+    const totalDiscountShown = discountRows.reduce((sum, row) => sum + row.amount, 0);
+    const displayNettotal    = hasIndividual
+        ? grossSubtotal - totalDiscountShown + transport
+        : toNumber(data.nettotal);
 
     return (
         <div className="bg-white p-8 text-black shadow-sm mx-auto my-0 print:shadow-none print:p-0 w-full max-w-[800px] border h-[60vh] border-gray-100 print:border-none overflow-y-auto overflow-x-hidden">
@@ -150,11 +185,19 @@ export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) =
 
                     {/* TOTALS SECTION */}
                     <tfoot className="font-bold italic">
-                        <tr>
-                            <td colSpan={7} className="border-none"></td>
-                            <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">Discount:</td>
-                            <td className="border border-black px-2 py-1 text-right">PKR {formatCurrency(data.discount || 0)}</td>
-                        </tr>
+                        {hasIndividual ? discountRows.map((row) => (
+                            <tr key={row.label}>
+                                <td colSpan={7} className="border-none"></td>
+                                <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">{row.label} ({formatCurrency(row.percent)}%):</td>
+                                <td className="border border-black px-2 py-1 text-right">-PKR {formatCurrency(row.amount)}</td>
+                            </tr>
+                        )) : (
+                            <tr>
+                                <td colSpan={7} className="border-none"></td>
+                                <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">Discount:</td>
+                                <td className="border border-black px-2 py-1 text-right">PKR {formatCurrency(data.discount || 0)}</td>
+                            </tr>
+                        )}
                         <tr>
                             <td colSpan={7} className="border-none"></td>
                             <td className="border border-black px-2 py-1 bg-gray-50 text-[10px] uppercase">Transport:</td>
@@ -164,7 +207,7 @@ export const DeliveryNoteReportComponent = ({ data }: DeliveryNoteReportProps) =
                             <td colSpan={7} className="border-none"></td>
                             <td className="border border-black px-2 py-2 bg-gray-100 uppercase text-xs">Net Total</td>
                             <td className="border border-black px-2 py-2 text-right bg-gray-100 text-sm decoration-double underline">
-                                PKR {formatCurrency(data.nettotal || 0)}
+                                PKR {formatCurrency(displayNettotal)}
                             </td>
                         </tr>
                     </tfoot>

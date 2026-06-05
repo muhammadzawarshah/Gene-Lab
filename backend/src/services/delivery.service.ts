@@ -41,12 +41,15 @@ static async syncSalesOrderStatus(tx: any, soId: number) {
 }
 
 static async shipOrder(
-  soId: number, 
-  warehouseId: number, 
-  discount: string, 
-  transportCharges: string, 
-  totalAmount: string, 
-  products: any[] 
+  soId: number,
+  warehouseId: number,
+  discount: string,
+  transportCharges: string,
+  totalAmount: string,
+  products: any[],
+  tpDiscount?: number,
+  ddDiscount?: number,
+  otherDiscount?: number
 ) {
   return await prisma.$transaction(async (tx) => {
 
@@ -147,13 +150,16 @@ static async shipOrder(
     const deliveryNumber = `DN-${dateStr}-${nextSeq}`;
 
     // 3. Delivery Note Master Record create karein
-    const delivery = await tx.deliverynote.create({
+    const delivery = await (tx.deliverynote as any).create({
       data: {
         so_id: Number(soId),
-        delivery_number: deliveryNumber, 
+        delivery_number: deliveryNumber,
         delv_date: today,
         status: 'PENDING',
         discount: String(discount || "0"),
+        tp_discount: tpDiscount !== undefined ? Number(tpDiscount) : null,
+        dd_discount: ddDiscount !== undefined ? Number(ddDiscount) : null,
+        other_discount: otherDiscount !== undefined ? Number(otherDiscount) : null,
         transportcharges: String(transportCharges || "0"),
         nettotal: String(totalAmount || "0"),
       }
@@ -311,7 +317,7 @@ static async shipOrder(
           },
         },
       },
-      orderBy: { delv_date: 'desc' }
+      orderBy: { delv_note_id: 'desc' }
     });
   }
 

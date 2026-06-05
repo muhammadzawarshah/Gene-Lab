@@ -23,6 +23,7 @@ export default function PendingDeliveries() {
   const [isApproved, setIsApproved] = useState(false);
   const [batchOptions, setBatchOptions] = useState<{ [key: string]: any[] }>({});
   const [reportDelivery, setReportDelivery] = useState<any>(null);
+  const [reportDiscountMode, setReportDiscountMode] = useState<'tp' | 'tp_dd' | 'all' | null>(null);
 
   const getAuthToken = () => document.cookie.split("; ").find((row) => row.startsWith("auth_token="))?.split("=")[1];
 
@@ -52,7 +53,7 @@ export default function PendingDeliveries() {
           status: item.status || "PENDING" // Initial Status
         };
       });
-      setDeliveries(mappedData);
+      setDeliveries(mappedData.sort((a: any, b: any) => b.delv_note_id - a.delv_note_id));
     } catch (error) {
       toast.error("Records load karne mein masla hua.");
     } finally {
@@ -173,7 +174,7 @@ export default function PendingDeliveries() {
                   <td className="px-6 py-6 text-center">
                     <div className="flex justify-center gap-2">
                       <button onClick={() => { setSelectedDelivery(item); setMode("view"); }} className="p-3 bg-slate-800/50 rounded-xl text-slate-400 hover:text-white cursor-pointer"><Eye size={16} /></button>
-                      <button onClick={() => setReportDelivery(item)} className="p-3 bg-slate-800/50 rounded-xl text-emerald-500 hover:bg-emerald-600 hover:text-white cursor-pointer"><FileText size={16} /></button>
+                      <button onClick={() => { setReportDelivery(item); setReportDiscountMode(null); }} className="p-3 bg-slate-800/50 rounded-xl text-emerald-500 hover:bg-emerald-600 hover:text-white cursor-pointer"><FileText size={16} /></button>
                       <button onClick={() => { setSelectedDelivery(item); setMode("edit"); }} className="p-3 bg-slate-800/50 rounded-xl text-rose-500 hover:bg-rose-600 hover:text-white cursor-pointer"><Edit3 size={16} /></button>
                     </div>
                   </td>
@@ -297,13 +298,42 @@ export default function PendingDeliveries() {
             <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
               <h3 className="text-white font-black italic uppercase ml-4">Delivery Note Report</h3>
               <div className="flex gap-4">
-                <button onClick={() => printElementById("printable-area", "Delivery Note Report")} className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all">Print PDF</button>
-                <button onClick={() => setReportDelivery(null)} className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"><X size={20} /></button>
+                {reportDiscountMode && (
+                  <button
+                    onClick={() => setReportDiscountMode(null)}
+                    className="px-6 py-2 bg-white/10 text-white text-[10px] font-black uppercase rounded-xl hover:bg-white/20 transition-all"
+                  >
+                    Change Mode
+                  </button>
+                )}
+                {reportDiscountMode && (
+                  <button onClick={() => printElementById("printable-area", "Delivery Note Report")} className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all">Print PDF</button>
+                )}
+                <button onClick={() => { setReportDelivery(null); setReportDiscountMode(null); }} className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"><X size={20} /></button>
               </div>
             </div>
             <div className="p-6 bg-gray-100 rounded-b-[2rem]">
               <div id="printable-area">
-                <DeliveryNoteReportComponent data={reportDelivery} />
+                {!reportDiscountMode ? (
+                  <div className="grid gap-4 p-8 md:grid-cols-3">
+                    {[
+                      { key: 'tp' as const, title: 'Report With TP', desc: 'Sirf TP discount apply hoga.' },
+                      { key: 'tp_dd' as const, title: 'Report With TP + DD', desc: 'TP aur DD discount apply honge.' },
+                      { key: 'all' as const, title: 'Report With TP + DD + Other', desc: 'Teeno discounts apply honge.' },
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setReportDiscountMode(option.key)}
+                        className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-400 hover:shadow-lg"
+                      >
+                        <p className="text-sm font-black uppercase text-slate-950">{option.title}</p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">{option.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <DeliveryNoteReportComponent data={reportDelivery} discountMode={reportDiscountMode} />
+                )}
               </div>
             </div>
           </div>

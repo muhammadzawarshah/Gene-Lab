@@ -9,6 +9,14 @@ import {
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 
+type DiscountType = 'tp' | 'dd' | 'other';
+
+const discountOptions: { value: DiscountType; label: string }[] = [
+  { value: 'tp', label: 'TP Discount' },
+  { value: 'dd', label: 'DD Discount' },
+  { value: 'other', label: 'Other Discount' },
+];
+
 export default function CreateDeliveryNote() {
   const authToken = Cookies.get('auth_token');
 
@@ -22,6 +30,13 @@ export default function CreateDeliveryNote() {
   const [isWhOpen, setIsWhOpen] = useState(false);
   const [soSearch, setSoSearch] = useState("");
   const [isFetching, setIsFetching] = useState(false);
+
+  const [selectedDiscounts, setSelectedDiscounts] = useState<DiscountType[]>([]);
+  const [discountValues, setDiscountValues] = useState<Record<DiscountType, string>>({
+    tp: '',
+    dd: '',
+    other: '',
+  });
 
   interface DeliveryRow {
     so_line_id: number;
@@ -252,8 +267,40 @@ export default function CreateDeliveryNote() {
     () => formData.products.reduce((sum: number, item: DeliveryRow) => sum + (Number(item.quantity) * Number(item.sale_price)), 0),
     [formData.products]
   );
-  const grandTotal = lineItemsTotal + Number(formData.transportCharges);
+
+  const discountPercents = useMemo(() => ({
+    tp: Math.min(Math.max(Number(discountValues.tp) || 0, 0), 100),
+    dd: Math.min(Math.max(Number(discountValues.dd) || 0, 0), 100),
+    other: Math.min(Math.max(Number(discountValues.other) || 0, 0), 100),
+  }), [discountValues]);
+
+  const totalDiscountPercent = useMemo(
+    () => Math.min(selectedDiscounts.reduce((sum, type) => sum + discountPercents[type], 0), 100),
+    [discountPercents, selectedDiscounts]
+  );
+
+  const discountAmount = useMemo(
+    () => (lineItemsTotal * totalDiscountPercent) / 100,
+    [lineItemsTotal, totalDiscountPercent]
+  );
+
+  const grandTotal = lineItemsTotal - discountAmount + Number(formData.transportCharges);
   const emptyLines = formData.products.filter((item) => Number(item.quantity) <= 0).length === formData.products.length;
+
+  const addDiscount = (type: string) => {
+    if (!type) return;
+    const nextType = type as DiscountType;
+    setSelectedDiscounts((prev) => prev.includes(nextType) ? prev : [...prev, nextType]);
+  };
+
+  const updateDiscountValue = (type: DiscountType, value: string) => {
+    setDiscountValues((prev) => ({ ...prev, [type]: value }));
+  };
+
+  const removeDiscount = (type: DiscountType) => {
+    setSelectedDiscounts((prev) => prev.filter((item) => item !== type));
+    setDiscountValues((prev) => ({ ...prev, [type]: '' }));
+  };
 
   const handleSubmit = async () => {
     if (!selectedSO) return toast.error("Pehle order select karein");
@@ -276,6 +323,10 @@ export default function CreateDeliveryNote() {
         {
           orderId: selectedSO.so_id,
           ...formData,
+          discount: String(discountAmount),
+          tpDiscount: selectedDiscounts.includes('tp') ? discountPercents.tp : 0,
+          ddDiscount: selectedDiscounts.includes('dd') ? discountPercents.dd : 0,
+          otherDiscount: selectedDiscounts.includes('other') ? discountPercents.other : 0,
           status: 'pending',
           products: formData.products.map((item) => ({
             so_line_id: item.so_line_id,
@@ -291,6 +342,8 @@ export default function CreateDeliveryNote() {
       toast.success("Order Synced Successfully!", { id: tId });
       setSelectedSO(null);
       setFormData({ distributorName: '', orderDate: '', status: 'pending', remarks: '', warehouse_id: '', transportCharges: 0, products: [] });
+      setSelectedDiscounts([]);
+      setDiscountValues({ tp: '', dd: '', other: '' });
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Submission Failed!", { id: tId });
     }
@@ -460,6 +513,63 @@ export default function CreateDeliveryNote() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-6">
                 <div className="space-y-2">
+                  <label className={labelClass}>Add Discount</label>
+                  <div className="relative">
+                    <select
+                      className={inputStyle}
+                      value=""
+                      onChange={(e) => addDiscount(e.target.value)}
+                    >
+                      <option value="">Select Discount...</option>
+                      {discountOptions.map((option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                          disabled={selectedDiscounts.includes(option.value)}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute bottom-3.5 right-4 text-slate-500" size={16} />
+                  </div>
+                </div>
+
+                {selectedDiscounts.length > 0 && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {selectedDiscounts.map((type) => {
+                      const option = discountOptions.find((item) => item.value === type);
+                      return (
+                        <div key={type} className="rounded-2xl border border-white/5 bg-white/[0.025] p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                              {option?.label}
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => removeDiscount(type)}
+                              className="rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest text-rose-400 transition-all hover:bg-rose-500/10"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            className={`${inputStyle} text-right font-mono`}
+                            value={discountValues[type]}
+                            onChange={(e) => updateDiscountValue(type, e.target.value)}
+                            placeholder="0.00 %"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="space-y-2">
                   <label className={labelClass}>Transport Charges (PKR)</label>
                   <div className="relative">
                     <Truck className="absolute left-4 top-3.5 text-blue-500" size={16} />
@@ -470,6 +580,7 @@ export default function CreateDeliveryNote() {
                     />
                   </div>
                 </div>
+
                 <textarea rows={3}
                   className="w-full bg-[#0f172a] border border-slate-800 rounded-[2rem] p-6 text-sm outline-none focus:border-emerald-500"
                   placeholder="Dispatch instructions..."
@@ -484,6 +595,12 @@ export default function CreateDeliveryNote() {
                     <span>Subtotal</span>
                     <span>PKR {lineItemsTotal.toLocaleString()}</span>
                   </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-rose-400 text-xs font-bold uppercase tracking-widest">
+                      <span>Discount (-)</span>
+                      <span>PKR {discountAmount.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-blue-400 text-xs font-bold uppercase tracking-widest">
                     <span>Transport (+)</span>
                     <span>PKR {Number(formData.transportCharges).toLocaleString()}</span>

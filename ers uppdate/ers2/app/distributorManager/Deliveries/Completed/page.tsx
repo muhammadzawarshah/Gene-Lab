@@ -18,6 +18,7 @@ export default function CompletedDeliveries() {
   const { user } = useAuth();
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [selectedDelivery, setSelectedDelivery] = useState<any>(null);
+  const [reportDiscountMode, setReportDiscountMode] = useState<'tp' | 'tp_dd' | 'all' | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
@@ -53,7 +54,7 @@ export default function CompletedDeliveries() {
         };
       });
 
-      setDeliveries(completedOnly);
+      setDeliveries(completedOnly.sort((a: any, b: any) => b.delv_note_id - a.delv_note_id));
     } catch (error) {
       toast.error("Archive load karne mein masla hua.");
     } finally {
@@ -182,7 +183,7 @@ export default function CompletedDeliveries() {
                     <td className="px-8 py-7 text-white font-bold uppercase text-[11px] tracking-tight">{row.displayName}</td>
                     <td className="px-8 py-7 text-right text-white font-black italic text-lg font-mono">PKR {row.displayTotal.toLocaleString()}</td>
                     <td className="px-8 py-7 text-center">
-                      <button onClick={() => setSelectedDelivery(row)} className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer shadow-sm">
+                      <button onClick={() => { setSelectedDelivery(row); setReportDiscountMode(null); }} className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer shadow-sm">
                         <Eye size={18} />
                       </button>
                     </td>
@@ -203,14 +204,24 @@ export default function CompletedDeliveries() {
               <div className="sticky top-0 z-10 p-4 bg-slate-900 flex justify-between items-center rounded-t-[2rem]">
                 <h3 className="text-white font-black italic uppercase ml-4">Delivery Note Preview</h3>
                 <div className="flex gap-4">
-                  <button 
-                    onClick={() => printElementById("printable-area", "Delivery Note Report")}
-                    className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
-                  >
-                    Print Report
-                  </button>
-                  <button 
-                    onClick={() => setSelectedDelivery(null)} 
+                  {reportDiscountMode && (
+                    <button
+                      onClick={() => setReportDiscountMode(null)}
+                      className="px-6 py-2 bg-white/10 text-white text-[10px] font-black uppercase rounded-xl hover:bg-white/20 transition-all"
+                    >
+                      Change Mode
+                    </button>
+                  )}
+                  {reportDiscountMode && (
+                    <button
+                      onClick={() => printElementById("printable-area", "Delivery Note Report")}
+                      className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all"
+                    >
+                      Print Report
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setSelectedDelivery(null); setReportDiscountMode(null); }}
                     className="p-2 bg-white/10 text-white rounded-full hover:bg-red-500 transition-all"
                   >
                     <X size={20}/>
@@ -221,7 +232,26 @@ export default function CompletedDeliveries() {
               {/* Report Content Area */}
               <div className="p-6 bg-gray-100 rounded-b-[2rem]">
                 <div id="printable-area">
-                  <DeliveryNoteReportComponent data={selectedDelivery} />
+                  {!reportDiscountMode ? (
+                    <div className="grid gap-4 p-8 md:grid-cols-3">
+                      {[
+                        { key: 'tp' as const, title: 'Report With TP', desc: 'Sirf TP discount apply hoga.' },
+                        { key: 'tp_dd' as const, title: 'Report With TP + DD', desc: 'TP aur DD discount apply honge.' },
+                        { key: 'all' as const, title: 'Report With TP + DD + Other', desc: 'Teeno discounts apply honge.' },
+                      ].map((option) => (
+                        <button
+                          key={option.key}
+                          onClick={() => setReportDiscountMode(option.key)}
+                          className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-400 hover:shadow-lg"
+                        >
+                          <p className="text-sm font-black uppercase text-slate-950">{option.title}</p>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">{option.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <DeliveryNoteReportComponent data={selectedDelivery} discountMode={reportDiscountMode} />
+                  )}
                 </div>
               </div>
 

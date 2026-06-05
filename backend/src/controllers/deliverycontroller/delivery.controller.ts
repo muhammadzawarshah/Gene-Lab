@@ -6,24 +6,27 @@ export const postDelivery = async (req: Request, res: Response, next: NextFuncti
   try {
     const { soId } = req.params;
     // Request body se correct casing ke saath data nikaalein
-    const { warehouse_id, discount, transportCharges, totalAmount, products } = req.body;
+    const { warehouse_id, discount, transportCharges, totalAmount, products, tpDiscount, ddDiscount, otherDiscount } = req.body;
     console.log(req.body);
     // Validation
     if (!soId || !warehouse_id) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Sales Order ID and Warehouse ID are required." 
+      return res.status(400).json({
+        success: false,
+        message: "Sales Order ID and Warehouse ID are required."
       });
     }
 
     // Service Call (products array pass kar rahe hain)
     const deliveryNote = await DeliveryService.shipOrder(
-      Number(soId), 
-      Number(warehouse_id), 
-      discount, 
-      transportCharges, 
-      totalAmount, 
-      products
+      Number(soId),
+      Number(warehouse_id),
+      discount,
+      transportCharges,
+      totalAmount,
+      products,
+      tpDiscount !== undefined ? Number(tpDiscount) : undefined,
+      ddDiscount !== undefined ? Number(ddDiscount) : undefined,
+      otherDiscount !== undefined ? Number(otherDiscount) : undefined
     );
 
     res.status(201).json({
